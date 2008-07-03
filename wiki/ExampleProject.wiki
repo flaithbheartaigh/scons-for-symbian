@@ -85,9 +85,9 @@ Build for simulator
  scons compiler=winscw
 
 Build for device
- scons compiler=gcce
+ scons compiler=gcce release=urel 
 
 Use parallel building( if you have multiple cores )
- scons compiler=gcce --jobs=2
+ scons --jobs=2
 
 ----
