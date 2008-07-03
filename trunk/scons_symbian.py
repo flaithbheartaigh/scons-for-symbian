@@ -168,7 +168,7 @@ SYMBIAN_WINSCW_LIBPATHLIB = EPOCROOT + r"Epoc32\RELEASE\WINSCW\UDEB\\"
 
 #SYMBIAN_ARMV5_BASE_LIBRARIES = [ "drtrvct2_2", "scppnwdl", "drtaeabi", "dfprvct2_2", "dfpaeabi", "usrt2_2" ]
 SYMBIAN_ARMV5_BASE_LIBRARIES =  [ SYMBIAN_ARMV5_LIBPATHLIB + x + ".lib" for x in [ "usrt2_2" ] ]
-SYMBIAN_ARMV5_BASE_LIBRARIES += [ SYMBIAN_ARMV5_LIBPATHDSO + x + ".dso" for x in "drtrvct2_2", "scppnwdl", "drtaeabi", "dfprvct2_2", "dfpaeabi" ]
+SYMBIAN_ARMV5_BASE_LIBRARIES += [ SYMBIAN_ARMV5_LIBPATHDSO + x + ".dso" for x in [ "drtaeabi", "dfprvct2_2", "dfpaeabi", "scppnwdl" ,"drtrvct2_2" ] ]
 
 
 # LIBARGS must be AFTER the libraries or we get "undefined reference to `__gxx_personality_v0'" when linking
@@ -312,27 +312,40 @@ def get_gcce_compiler_environment(  target,
         LIBRARIES.append( r"\EPOC32\RELEASE\ARMV5\LIB\eikcore.dso" )
     
     LIBRARIES = LIBRARIES + SYMBIAN_ARMV5_BASE_LIBRARIES
-    LIBRARIES.sort()
+    #LIBRARIES.sort()
     LIBRARIES += LIBARGS 
     # Cleanup
     LIBRARIES = [ x.replace( "\\\\", "\\") for x in LIBRARIES ]
     
     #import pdb;pdb.set_trace()
     COMPILER_INCLUDE = os.path.abspath( EPOCROOT + "Epoc32\\INCLUDE\\GCCE\\GCCE.h" )
-        
+
+    # TODO: Cleanup following mess
+    
     # Create linker flags
     LINKFLAGS     = r"""
                     --target1-abs --no-undefined -nostdlib
                     -shared -Ttext 0x8000 -Tdata 0x400000
                     --default-symver
                     -soname %(TARGET)s{%(UID2)s}[%(UID3)s].exe
+                    """
+    if targettype == TARGETTYPE_EXE:
+        LINKFLAGS +="""
                     --entry _E32Startup  -u _E32Startup
+                    """
+    else:
+        LINKFLAGS +="""
+                    --entry _E32Dll  -u _E32Dll
+                    """
+                    
+    LINKFLAGS     +=r"""
                     %(EPOCROOT)sEpoc32\RELEASE\ARMV5\UREL\EDLL.LIB
                     -Map %(EPOCROOT)sEpoc32\RELEASE\GCCE\UREL\%(TARGET)s.%(TARGETTYPE)s.map
                     """
+
     if targettype == TARGETTYPE_EXE:
         LINKFLAGS = LINKFLAGS.replace( "EDLL.LIB", "EEXE.LIB" )
-         
+
     LINKFLAGS = textwrap.dedent( LINKFLAGS )
     LINKFLAGS = " ".join( [ x.strip() for x in LINKFLAGS.split("\n") ] )
 
@@ -342,11 +355,10 @@ def get_gcce_compiler_environment(  target,
                              "TARGETTYPE"   : targettype,
                              "EPOCROOT" : EPOCROOT }
     
-
+    #--vid=0x00000000
     ELF2E32 =   r"""
                 %(EPOCROOT)sEpoc32\Tools\elf2e32 --sid=%(UID3)s
                 --uid1=%(UID1)s --uid2=%(UID2)s --uid3=%(UID3)s
-                --vid=0x00000000
                 --capability=%(CAPABILITIES)s
                 --fpu=softvfp --targettype=%(TARGETTYPE)s
                 --output=$TARGET
