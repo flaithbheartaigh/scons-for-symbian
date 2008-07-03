@@ -1,14 +1,19 @@
 #summary Instructions to install Scons for Symbian
 
-=== Install [http://www.scons.org/ SCons]. ===
+==== Install [http://www.scons.org/ SCons]. ====
 I used
-{{{
  easy_install scons
-}}}
-At least SCons 0.98.5 did not install properly so you most likely need to copy the SCons folder from Python25\Lib\site-packages\scons-0.98.5-py2.5-win32.egg\scons-0.98.5 to Python25\Lib\site-packages\. After that you should have SCons folder under site-packages folder.
 
+At least SCons 0.98.5 did not install properly so you most likely need to copy the SCons folder from:
+ Python25\Lib\site-packages\scons-0.98.5-py2.5-win32.egg\scons-0.98.5
+to
+ Python25\Lib\site-packages\ 
+
+After that you should have SCons folder under site-packages.
+
+==== Get sources ====
   * Create 'scons_symbian' folder to 'Python25\Lib\site-packages\'
-  * Check out the source there
+  * Check out the project to the created folder
     * Follow the non-members' checkout instructions under [http://code.google.com/p/scons-for-symbian/source/checkout Source] tab.
 
 And you should be good to go.
