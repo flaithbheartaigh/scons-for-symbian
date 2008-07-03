@@ -10,6 +10,7 @@ to
  Python25\Lib\site-packages\ 
 
 After that you should have SCons folder under site-packages.
+Also remember to check that you have Python25\Scripts folder in your PATH.
 
 ==== Get sources ====
   * Create 'scons_symbian' folder to 'Python25\Lib\site-packages\'
