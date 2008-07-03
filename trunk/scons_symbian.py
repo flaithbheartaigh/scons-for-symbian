@@ -657,13 +657,33 @@ def SymbianProgram( target, targettype, sources, includes,
     returned_command = None
 
     if COMPILER == COMPILER_GCCE:
+        output_lib    = ( targettype in DLL_TARGETTYPES )
         temp_dll_path = TARGET_RESULTABLE % ("._tmp_" + targettype )
         resultables = [ temp_dll_path ]
 
+        # GCCE uses .dso instead of .lib
+        LIBPATH   = SYMBIAN_ARMV5_LIBPATHDSO
+        libraries = [ LIBPATH + x.lower().replace(".lib", ".dso") for x in libraries ]
+        
+        if output_lib:
+            libname = target + ".dso"
+            output_libpath = ( r"\EPOC32\RELEASE\%s\%s\%s" % ( "ARMV5", "Lib", libname ) )
+
         build_prog = env.Program( resultables, sources )
+
+        # Depend on the libs
+        for libname in libraries:
+            env.Depends( build_prog, libname )
         env.Depends( build_prog, converted_icons )
         env.Depends( build_prog, resource_headers )
-        env.Elf( TARGET_RESULTABLE % ( "" ), temp_dll_path )
+        
+        # Mark the lib as a resultable also
+        resultables = [ TARGET_RESULTABLE % ( "" ) ]
+        if output_lib:
+            resultables.append( output_libpath )
+
+        # Create final binary and lib/dso
+        env.Elf( resultables, temp_dll_path )
         return
     else:
 
