@@ -469,6 +469,13 @@ def SymbianProgram( target, targettype, sources, includes,
     if capabilities is None:
         capabilities = FREE_CAPS
     
+    # Add .lib if file extension does not exist
+    newlibs = []
+    for x in xrange( len( libraries ) ):
+        lib = libraries[x]
+        if "." not in lib:
+            libraries[x] = lib + ".lib"
+    
     # Check if stuff exists
     checked_paths = []
     checked_paths.extend( sources )
