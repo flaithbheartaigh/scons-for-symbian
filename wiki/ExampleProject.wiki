@@ -69,8 +69,6 @@ def IPCPyd():
                  r"."
                ]
     libs = ["python222", "euser"]
-    libs = [ x + ".lib" for x in libs ]
-
     return SymbianProgram( '_ipc', TARGETTYPE_PYD,
                             sources, inc, libs,
                             capabilities = FREE_CAPS,
