@@ -256,12 +256,14 @@ def get_winscw_compiler_environment(  target,
 
     COMPILER_INCLUDE = os.path.normpath( EPOCROOT + "/Epoc32/INCLUDE/GCCE/GCCE.h" )
     env = Environment( ENV = os.environ,#os.environ['PATH'],
+                   CC  = r'mwccsym2.exe',
                    CXX = r'mwccsym2.exe',
                    #CCCOMFLAGS= '$CPPFLAGS $_CPPDEFFLAGS $_CPPINCFLAGS -o $TARGET $SOURCES',
                    #CCFLAGS = WINSCW_CC_FLAGS,#'-O2',
                    CPPPATH = INCLUDES + includes,
                    CPPDEFINES = defines,
-                   CXXFLAGS   = WINSCW_CC_FLAGS + ' -cwd source -i- -include "Symbian_OS_v9.1.hrh"', #WARNINGS + " -x c++ -include " + COMPILER_INCLUDE,
+                   #CXXFLAGS   = WINSCW_CC_FLAGS + ' -cwd source -i- -include "Symbian_OS_v9.1.hrh"',
+                   CCFLAGS     = WINSCW_CC_FLAGS + ' -cwd source -i- -include "Symbian_OS_v9.1.hrh"',
                    INCPREFIX  = "-i ",
                    CPPDEFPREFIX = "-d ",
                    # Linker settings
@@ -285,9 +287,10 @@ def get_gcce_compiler_environment(  target,
                                     libraries,
                                     uid2,
                                     uid3,
-                                    definput = None,
+                                    definput     = None,
                                     capabilities = None,
-                                    defines = None ):
+                                    defines      = None,
+                                    allowdlldata = True ):
     """Create GCCE building environment
     """
 
@@ -307,10 +310,13 @@ def get_gcce_compiler_environment(  target,
     LIBPATH   = SYMBIAN_ARMV5_LIBPATHDSO
     
     # GCCE uses .dso instead of .lib
-    LIBRARIES = [ LIBPATH + x.lower().replace(".lib", ".dso") for x in libraries ]#+ ".dso"    
+    LIBRARIES = [ LIBPATH + x.lower().replace(".lib", ".dso") for x in libraries ]#+ ".dso"
     if targettype == TARGETTYPE_EXE:
         LIBRARIES.append( r"\EPOC32\RELEASE\ARMV5\LIB\eikcore.dso" )
-    
+    else:
+        # Must be first
+        LIBRARIES = [ r"\EPOC32\RELEASE\ARMV5\UDEB\edllstub.lib" ] + LIBRARIES
+        
     LIBRARIES = LIBRARIES + SYMBIAN_ARMV5_BASE_LIBRARIES
     #LIBRARIES.sort()
     LIBRARIES += LIBARGS 
@@ -367,6 +373,9 @@ def get_gcce_compiler_environment(  target,
                 --linkas=%(TARGET)s{000a0000}[%(UID3)s].%(TARGETTYPE)s
                 --libpath="%(EPOCROOT)sEPOC32\RELEASE\ARMV5\LIB"
                 """
+    if allowdlldata and targettype in DLL_TARGETTYPES:
+        ELF2E32 += "--dlldata "
+
     #--output="%(EPOCROOT)sEPOC32\RELEASE\GCCE\%(RELEASE)s\$TARGET"
     #import textwrap
     ELF2E32 = textwrap.dedent( ELF2E32 )
@@ -425,11 +434,13 @@ def get_gcce_compiler_environment(  target,
      
     env = Environment (
                     ENV = os.environ,
+                    CC  = r'arm-none-symbianelf-g++',
                     CXX = r'arm-none-symbianelf-g++',
                     #CCFLAGS = '-O2',
                     CPPPATH = INCLUDES + includes,
                     CPPDEFINES = defines,
                     CXXFLAGS = WARNINGS + " -x c++ -include " + COMPILER_INCLUDE,
+                    CFLAGS = WARNINGS +  " -x c   -include " + COMPILER_INCLUDE,
                     INCPREFIX = "-I ",
                     
                     # Linker settings
@@ -468,7 +479,7 @@ def SymbianProgram( target, targettype, sources, includes,
 
     if capabilities is None:
         capabilities = FREE_CAPS
-    
+
     # Add .lib if file extension does not exist
     newlibs = []
     for x in xrange( len( libraries ) ):
@@ -687,7 +698,7 @@ def SymbianProgram( target, targettype, sources, includes,
         if output_lib:
             libname = target + ".dso"
             output_libpath = ( r"\EPOC32\RELEASE\%s\%s\%s" % ( "ARMV5", "Lib", libname ) )
-
+            
         build_prog = env.Program( resultables, sources )
 
         # Depend on the libs
@@ -703,7 +714,7 @@ def SymbianProgram( target, targettype, sources, includes,
 
         # Create final binary and lib/dso
         env.Elf( resultables, temp_dll_path )
-        return
+        #return
     else:
 
         # Compile sources ------------------------------------------------------
@@ -866,7 +877,7 @@ def SymbianProgram( target, targettype, sources, includes,
 
 
 
-        if output_libpath is not None:
+        if output_libpath is not None and COMPILER == COMPILER_WINSCW :
             s,t = output_libpath
             postcommands.append( "copy %s %s" % ( s, t ) )
             installed.append( t )
