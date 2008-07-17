@@ -1,5 +1,12 @@
 """
-SCons for Symbian - SCons build toolchain support for Symbian
+SCons for Symbian - SCons build toolchain support for Symbian.
+
+Usage:
+
+from scons_symbian import *
+
+SymbianProgram( "MyApp", TARGETTYPE_EXE )
+
 """
 __author__    = "Jussi Toivola"
 __license__   = "MIT License"
@@ -39,23 +46,26 @@ RELEASE_UREL    = "UREL"
 RELEASE_UDEB    = "UDEB"
 
 TARGETTYPE_DLL    = "DLL"
-TARGETTYPE_PYD    = "PYD"
 TARGETTYPE_EXE    = "EXE"
+TARGETTYPE_LIB    = "LIB"
 TARGETTYPE_PLUGIN = "PLUGIN"
+TARGETTYPE_PYD    = "PYD"
 
 #: List of possible targettypes
 TARGETTYPES       = [ TARGETTYPE_DLL,
                       TARGETTYPE_EXE,
-                      TARGETTYPE_PYD,
-                      TARGETTYPE_PLUGIN ]
+                      TARGETTYPE_LIB,
+                      TARGETTYPE_PLUGIN,
+                      TARGETTYPE_PYD ]
 
 #: Types, which are actually just dlls
-DLL_TARGETTYPES = [ TARGETTYPE_DLL, TARGETTYPE_PYD ]
+DLL_TARGETTYPES = [ TARGETTYPE_DLL, TARGETTYPE_PYD, TARGETTYPE_LIB ]
 
 #: Maps targettype to correct uid
 TARGETTYPE_UID_MAP = {
     TARGETTYPE_DLL : "0x10000079",
-    TARGETTYPE_EXE : "0x1000007a"
+    TARGETTYPE_EXE : "0x1000007a",
+    TARGETTYPE_LIB : "",
 }
 
 opt = Options(None, ARGUMENTS)
@@ -100,6 +110,13 @@ def __get_defines():
 #: Command-line define support
 CMD_LINE_DEFINES = __get_defines()
 
+#: SDK Installation folder
+SDKFOLDER     = r"%sEpoc32\release\%s\%s\\" % (
+                    EPOCROOT,
+                    COMPILER,
+                    RELEASE
+                )
+                    
 
 # TODO: freeze # perl -S \epoc32\tools\efreeze.pl %(FROZEN)s %(LIB_DEFS)s
 print "Building", COMPILER, RELEASE
@@ -123,15 +140,14 @@ __EMULATOR_IMAGE_HEADER2(0x1000007a,0x100039ce,%(UID3)s,EPriorityForeground,0x00
 """
 
 # in template
-# UID2 = 0x100039ce for exe
-# UID2 = 0x00000000 for dll
+# UID1 = 0x100039ce for exe
+# UID1 = 0x00000000 for dll
 
 # More defines set by getenvironment
 DEFAULT_SYMBIAN_DEFINES = [ "__SYMBIAN32__",
                             "_UNICODE",
                             "__SERIES60_30__",
                             "__SERIES60_3X__",
-                            #"__S60__",
                             "__SUPPORT_CPP_EXCEPTIONS__",
                              ]
 
@@ -163,7 +179,7 @@ INCLUDES = [ EPOCROOT +'Epoc32/include',
              #r'D:\Symbian\CSL Arm Toolchain\bin\..\lib\gcc\arm-none-symbianelf\3.4.3\include'
            ]
 SYMBIAN_ARMV5_LIBPATHDSO = EPOCROOT + r"Epoc32\RELEASE\ARMV5\LIB\\"
-SYMBIAN_ARMV5_LIBPATHLIB = EPOCROOT + r"Epoc32\RELEASE\ARMV5\UREL\\"
+SYMBIAN_ARMV5_LIBPATHLIB = EPOCROOT + r"Epoc32\RELEASE\ARMV5\%s\\" % RELEASE
 SYMBIAN_WINSCW_LIBPATHLIB = EPOCROOT + r"Epoc32\RELEASE\WINSCW\UDEB\\"
 
 #SYMBIAN_ARMV5_BASE_LIBRARIES = [ "drtrvct2_2", "scppnwdl", "drtaeabi", "dfprvct2_2", "dfpaeabi", "usrt2_2" ]
@@ -198,6 +214,13 @@ def get_winscw_compiler_environment(  target,
                                     capabilities = None,
                                     defines = None ):
 
+    # Add .lib if file extension does not exist
+    newlibs = []
+    for x in xrange( len( libraries ) ):
+        lib = libraries[x]
+        if "." not in lib:
+            libraries[x] = lib + ".lib"
+            
     OUTPUT_FOLDER = get_output_folder( COMPILER, RELEASE, target, targettype )
 
     LIBPATH   = SYMBIAN_WINSCW_LIBPATHLIB
@@ -256,8 +279,14 @@ def get_winscw_compiler_environment(  target,
 
     COMPILER_INCLUDE = os.path.normpath( EPOCROOT + "/Epoc32/INCLUDE/GCCE/GCCE.h" )
     env = Environment( ENV = os.environ,#os.environ['PATH'],
-                   CC  = r'mwccsym2.exe',
-                   CXX = r'mwccsym2.exe',
+                    # Static library settings
+                    AR  = r'mwldsym2',
+                    ARFLAGS = "-library -msgstyle gcc -stdlib -subsystem windows -noimplib -o",
+                    RANLIBCOM = "",
+                    LIBPREFIX = "",
+                    
+                   CC  = r'mwccsym2',
+                   CXX = r'mwccsym2',
                    #CCCOMFLAGS= '$CPPFLAGS $_CPPDEFFLAGS $_CPPINCFLAGS -o $TARGET $SOURCES',
                    #CCFLAGS = WINSCW_CC_FLAGS,#'-O2',
                    CPPPATH = INCLUDES + includes,
@@ -267,7 +296,7 @@ def get_winscw_compiler_environment(  target,
                    INCPREFIX  = "-i ",
                    CPPDEFPREFIX = "-d ",
                    # Linker settings
-                    LINK    = r'mwldsym2.exe',
+                    LINK    = r'mwldsym2',
 #                     LIBPATH = [
 #                                  r"D:\Symbian\CSL Arm Toolchain\lib\gcc\arm-none-symbianelf\3.4.3",
 #                                  r"D:\Symbian\CSL Arm Toolchain\arm-none-symbianelf\lib"
@@ -309,19 +338,30 @@ def get_gcce_compiler_environment(  target,
     LIBARGS   = [ "-lsupc++", "-lgcc" ]
     LIBPATH   = SYMBIAN_ARMV5_LIBPATHDSO
     
+    # Add .dso if file extension does not exist
+    for x in xrange( len( libraries ) ):
+        lib = libraries[x]
+        if "." not in lib:
+            lib += ".dso"
+
+        if ".dso" in lib.lower():
+            libraries[x] = LIBPATH + lib
+        else:
+            libraries[x] = SYMBIAN_ARMV5_LIBPATHLIB + lib
+            
     # GCCE uses .dso instead of .lib
-    LIBRARIES = [ LIBPATH + x.lower().replace(".lib", ".dso") for x in libraries ]#+ ".dso"
+    #LIBRARIES = [ LIBPATH + x.lower().replace(".lib", ".dso") for x in libraries ]#+ ".dso"
     if targettype == TARGETTYPE_EXE:
-        LIBRARIES.append( r"\EPOC32\RELEASE\ARMV5\LIB\eikcore.dso" )
+        libraries.append( r"\EPOC32\RELEASE\ARMV5\LIB\eikcore.dso" )
     else:
         # Must be first
-        LIBRARIES = [ r"\EPOC32\RELEASE\ARMV5\UDEB\edllstub.lib" ] + LIBRARIES
+        libraries = [ r"\EPOC32\RELEASE\ARMV5\UDEB\edllstub.lib" ] + libraries
         
-    LIBRARIES = LIBRARIES + SYMBIAN_ARMV5_BASE_LIBRARIES
+    libraries = libraries + SYMBIAN_ARMV5_BASE_LIBRARIES
     #LIBRARIES.sort()
-    LIBRARIES += LIBARGS 
+    libraries += LIBARGS
     # Cleanup
-    LIBRARIES = [ x.replace( "\\\\", "\\") for x in LIBRARIES ]
+    libraries = [ x.replace( "\\\\", "\\") for x in libraries ]
     
     #import pdb;pdb.set_trace()
     COMPILER_INCLUDE = os.path.abspath( EPOCROOT + "Epoc32\\INCLUDE\\GCCE\\GCCE.h" )
@@ -407,7 +447,42 @@ def get_gcce_compiler_environment(  target,
         uid1 = TARGETTYPE_UID_MAP[TARGETTYPE_DLL]#"0x10000079" # DLL
 
 
-    ELF2E32 = ELF2E32 % { "EPOCROOT"    : EPOCROOT,
+        
+     
+    env = Environment (
+                    ENV = os.environ,
+                    # Static library settings
+                    AR  = r'arm-none-symbianelf-ar',
+                    RANLIBCOM = "",
+                    LIBPREFIX = "",
+                    
+                    # Compiler settings
+                    CC  = r'arm-none-symbianelf-g++',
+                    CFLAGS = WARNINGS +  " -x c   -include " + COMPILER_INCLUDE,
+                    
+                    CXX = r'arm-none-symbianelf-g++',
+                    CXXFLAGS = WARNINGS + " -x c++ -include " + COMPILER_INCLUDE,
+                    CPPPATH = INCLUDES + includes,
+                    CPPDEFINES = defines,
+                    INCPREFIX = "-I ",
+                    
+                    # Linker settings
+                    LINK    = r'"arm-none-symbianelf-ld"',
+                    LIBPATH = [ PATH_ARM_TOOLCHAIN + x for x in [
+                                r"\..\lib\gcc\arm-none-symbianelf\3.4.3",
+                                r"\..\arm-none-symbianelf\lib"
+                                ] 
+                              ],
+                    LINKFLAGS     = LINKFLAGS,
+                    LIBS          = libraries,
+                    LIBLINKPREFIX = " ",
+                    PROGSUFFIX    = ".noelfexe"
+                )
+                
+    # Add special builders------------------------------------------------------
+
+    #: Elf32 converter
+    elf2e32_cmd = ELF2E32 % { "EPOCROOT"    : EPOCROOT,
                           "CAPABILITIES": "+".join( capabilities ),
                           "TARGET"      : target,
                           "RELEASE"     : RELEASE,
@@ -420,9 +495,9 @@ def get_gcce_compiler_environment(  target,
 
     elf2e32_output = r"%(EPOCROOT)sEPOC32\RELEASE\GCCE\%(RELEASE)s\\" % \
                         { "EPOCROOT" : EPOCROOT,
-                          "RELEASE"  : RELEASE }    
+                          "RELEASE"  : RELEASE }
 
-    elf2e32 = Builder( action     = ELF2E32,
+    elf2e32_builder = Builder( action     = elf2e32_cmd,
                        src_suffix = ".noelfexe",
                        suffix     = "." + targettype,
                        #prefix     = elf2e32_output,
@@ -430,33 +505,9 @@ def get_gcce_compiler_environment(  target,
                        single_source = True,
 
                        #emitter    = elf_targets )#elf2e32_output + target + ".exe" )#, prefix = elf2e32_output )
-                     )        
-     
-    env = Environment (
-                    ENV = os.environ,
-                    CC  = r'arm-none-symbianelf-g++',
-                    CXX = r'arm-none-symbianelf-g++',
-                    #CCFLAGS = '-O2',
-                    CPPPATH = INCLUDES + includes,
-                    CPPDEFINES = defines,
-                    CXXFLAGS = WARNINGS + " -x c++ -include " + COMPILER_INCLUDE,
-                    CFLAGS = WARNINGS +  " -x c   -include " + COMPILER_INCLUDE,
-                    INCPREFIX = "-I ",
-                    
-                    # Linker settings
-                    LINK    = r'"arm-none-symbianelf-ld"',
-                    LIBPATH = [ PATH_ARM_TOOLCHAIN + x for x in [
-                                r"\..\lib\gcc\arm-none-symbianelf\3.4.3",
-                                r"\..\arm-none-symbianelf\lib"
-                                ] 
-                              ],
-                    LINKFLAGS     = LINKFLAGS,
-                    LIBS          = LIBRARIES,
-                    LIBLINKPREFIX = " ",
-                    PROGSUFFIX    = ".noelfexe"
-                )
-    env.Append( BUILDERS = { "Elf" : elf2e32 } )
-
+                     )
+    env.Append( BUILDERS = { "Elf" : elf2e32_builder } )
+    
     return env
 
 
@@ -464,7 +515,7 @@ def get_gcce_compiler_environment(  target,
 #OUTPUT_FOLDER_TEMPLATE = "%(COMPILER)_%(RELEASE)s\\%(TARGET)s_%(TARGETTYPE)s"
 
 def SymbianProgram( target, targettype, sources, includes,
-                    libraries, uid2 = "0x0", uid3 = "0x0",
+                    libraries = None, uid2 = "0x0", uid3 = "0x0",
                     definput = None, capabilities = None,
                     icons = None, resources = None,
                     **kwargs ):
@@ -472,21 +523,17 @@ def SymbianProgram( target, targettype, sources, includes,
     Compiles sources using selected compiler.
     Converts resource files.
     Converts icon files.
+    @param libraries: Used libraries.
     @param capabilities: Used capabilities. Default: FREE_CAPS
     @param **kwargs: Keywords passed to C{getenvironment()}
     @return: Last Command. For setting dependencies.
     """
 
+    if libraries is None:
+        libraries = []
     if capabilities is None:
         capabilities = FREE_CAPS
 
-    # Add .lib if file extension does not exist
-    newlibs = []
-    for x in xrange( len( libraries ) ):
-        lib = libraries[x]
-        if "." not in lib:
-            libraries[x] = lib + ".lib"
-    
     # Check if stuff exists
     checked_paths = []
     checked_paths.extend( sources )
@@ -693,27 +740,37 @@ def SymbianProgram( target, targettype, sources, includes,
 
         # GCCE uses .dso instead of .lib
         LIBPATH   = SYMBIAN_ARMV5_LIBPATHDSO
-        libraries = [ LIBPATH + x.lower().replace(".lib", ".dso") for x in libraries ]
+        #libraries = [ LIBPATH + x.lower().replace(".lib", ".dso") for x in libraries ]
         
         if output_lib:
             libname = target + ".dso"
             output_libpath = ( r"\EPOC32\RELEASE\%s\%s\%s" % ( "ARMV5", "Lib", libname ) )
-            
-        build_prog = env.Program( resultables, sources )
 
-        # Depend on the libs
-        for libname in libraries:
-            env.Depends( build_prog, libname )
-        env.Depends( build_prog, converted_icons )
-        env.Depends( build_prog, resource_headers )
+        build_prog = None
+        if targettype != TARGETTYPE_LIB:
+            build_prog = env.Program( resultables, sources )
+
+            # Depend on the libs
+            for libname in libraries:
+                env.Depends( build_prog, libname )
+                
+            env.Depends( build_prog, converted_icons )
+            env.Depends( build_prog, resource_headers )
+
+            # Mark the lib as a resultable also
+            resultables = [ TARGET_RESULTABLE % ( "" ) ]
+            if output_lib:
+                resultables.append( output_libpath )
+
+            # Create final binary and lib/dso
+            env.Elf( resultables, temp_dll_path )
+
+        else:
+            build_prog = env.StaticLibrary( TARGET_RESULTABLE % ".lib" , sources )
+            output_libpath = ( TARGET_RESULTABLE % ".lib",
+                                r"\EPOC32\RELEASE\ARMV5\%s\\%s.lib" % ( RELEASE, target ) )
+                                
         
-        # Mark the lib as a resultable also
-        resultables = [ TARGET_RESULTABLE % ( "" ) ]
-        if output_lib:
-            resultables.append( output_libpath )
-
-        # Create final binary and lib/dso
-        env.Elf( resultables, temp_dll_path )
         #return
     else:
 
@@ -757,16 +814,21 @@ def SymbianProgram( target, targettype, sources, includes,
             #resultables.append( TARGET_RESULTABLE % ".inf" )
             output_libpath = ( TARGET_RESULTABLE % ".lib",
                                 r"\EPOC32\RELEASE\%s\%s\\" % ( COMPILER, RELEASE ) + libname )
-
-        build_prog = env.Program( resultables, sources )
-        # Depends on the used libraries. This has a nice effect since if,
-        # this project depends on one of the other projects/components/dlls/libs
-        # the depended project is automatically built first.
-        env.Depends( build_prog, [ r"\EPOC32\RELEASE\%s\%s\\%s" % ( COMPILER, RELEASE, libname ) for libname in libraries] )
-        env.Depends( build_prog, converted_icons )
-        env.Depends( build_prog, resource_headers )
         
-        if output_lib:
+        if targettype != TARGETTYPE_LIB:
+            build_prog = env.Program( resultables, sources )
+            # Depends on the used libraries. This has a nice effect since if,
+            # this project depends on one of the other projects/components/dlls/libs
+            # the depended project is automatically built first.
+            env.Depends( build_prog, [ r"\EPOC32\RELEASE\%s\%s\\%s" % ( COMPILER, RELEASE, libname ) for libname in libraries] )
+            env.Depends( build_prog, converted_icons )
+            env.Depends( build_prog, resource_headers )
+        else:
+            build_prog = env.StaticLibrary( TARGET_RESULTABLE % ".lib" , sources )
+            output_libpath = ( TARGET_RESULTABLE % ".lib",
+                                r"\EPOC32\RELEASE\WINSCW\%s\\%s.lib" % ( RELEASE, target ) )
+        
+        if output_lib and targettype != TARGETTYPE_LIB:
             # Create .inf file
 
             if definput is not None:# and os.path.exists(definput):
@@ -808,7 +870,7 @@ def SymbianProgram( target, targettype, sources, includes,
         libfolder = "%EPOCROOT%EPOC32\RELEASE\WINSCW\UDEB\\"
         libs      = [ libfolder + x for x in libraries]
 
-        if targettype in DLL_TARGETTYPES:
+        if targettype in DLL_TARGETTYPES and targettype != TARGETTYPE_LIB:
 
             env.Command( TARGET_RESULTABLE % ("." + targettype ), [ temp_dll_path, TARGET_RESULTABLE % ".def" ],
             [
@@ -847,14 +909,7 @@ def SymbianProgram( target, targettype, sources, includes,
             )
 
     # NOTE: For some reason SCons does not understand drive letters with targets
-
-    # Installer folder
-    sdkfolder     = r"%sEpoc32\release\%s\%s\\" % (
-                        EPOCROOT,
-                        COMPILER,
-                        RELEASE
-                    )
-
+ 
     def copy_result_binary( ):
         """Copy the linked binary( exe, dll ) for emulator
         and to resultables folder.
@@ -866,7 +921,7 @@ def SymbianProgram( target, targettype, sources, includes,
         postcommands = []
         copysource = TARGET_RESULTABLE % ( "."+targettype)
         target_filename = target + "." + targettype
-        sdkpath       = sdkfolder + "\\" + target_filename
+        sdkpath       = SDKFOLDER + "\\" + target_filename
 
         installed = []
         if COMPILER == COMPILER_WINSCW:
@@ -877,7 +932,8 @@ def SymbianProgram( target, targettype, sources, includes,
 
 
 
-        if output_libpath is not None and COMPILER == COMPILER_WINSCW :
+        if output_libpath is not None and \
+        ( COMPILER == COMPILER_WINSCW or targettype == TARGETTYPE_LIB ):
             s,t = output_libpath
             postcommands.append( "copy %s %s" % ( s, t ) )
             installed.append( t )
