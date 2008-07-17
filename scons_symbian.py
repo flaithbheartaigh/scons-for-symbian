@@ -528,6 +528,7 @@ def SymbianProgram( target, targettype, sources, includes,
                     libraries = None, uid2 = "0x0", uid3 = "0x0",
                     definput = None, capabilities = None,
                     icons = None, resources = None,
+                    rssdefines = None,
                     **kwargs ):
     """
     Compiles sources using selected compiler.
@@ -535,6 +536,7 @@ def SymbianProgram( target, targettype, sources, includes,
     Converts icon files.
     @param libraries: Used libraries.
     @param capabilities: Used capabilities. Default: FREE_CAPS
+    @param rssdefines: Preprocessor definitions for resource compiler.
     @param **kwargs: Keywords passed to C{getenvironment()}
     @return: Last Command. For setting dependencies.
     """
@@ -543,7 +545,10 @@ def SymbianProgram( target, targettype, sources, includes,
         libraries = []
     if capabilities is None:
         capabilities = FREE_CAPS
-
+    if rssdefines is None:
+        rssdefines = []
+    rssdefines.append( r'LANGUAGE_SC' )
+    
     # Check if stuff exists
     checked_paths = []
     checked_paths.extend( sources )
@@ -656,12 +661,13 @@ def SymbianProgram( target, targettype, sources, includes,
 
         if resources is not None:
             res_includes = "-I " + " -I ".join( includes + INCLUDES )
+            res_defines   = "-D" + " -D".join( rssdefines )
             convert_res_cmd = " ".join( [
                 r'perl -S %sepoc32\tools\epocrc.pl' % EPOCROOT,
-                r'  -m045,046,047 -I-',
+                r'-m045,046,047 -I-',
                 res_includes,
-                r'-DLANGUAGE_SC ',
-                r'-u "%(SOURCEPATH)s" ',
+                res_defines,
+                r'-u "%(SOURCEPATH)s"',
                 '-o"%(OUTPUT_FOLDER)s\\%(RESOURCE)s.RSC"',
                 '-h"%(OUTPUT_FOLDER)s\\%(RESOURCE)s.rsg"',
                 #r'-t"\EPOC32\BUILD\Projects\LoggingServer\LoggingServerGUI\group\LOGGINGSERVERGUI\WINSCW"',
