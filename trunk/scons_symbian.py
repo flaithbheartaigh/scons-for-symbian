@@ -61,7 +61,7 @@ TARGETTYPES       = [ TARGETTYPE_DLL,
 #: Types, which are actually just dlls
 DLL_TARGETTYPES = [ TARGETTYPE_DLL, TARGETTYPE_PYD, TARGETTYPE_LIB ]
 
-#: Maps targettype to correct uid
+#: Maps targettype to correct uid1
 TARGETTYPE_UID_MAP = {
     TARGETTYPE_DLL : "0x10000079",
     TARGETTYPE_EXE : "0x1000007a",
@@ -212,7 +212,10 @@ def get_winscw_compiler_environment(  target,
                                     uid3,
                                     definput = None,
                                     capabilities = None,
-                                    defines = None ):
+                                    defines = None,
+                                    allowdlldata  = True,                                    
+                                    epocstacksize = None 
+                                    ):
 
     # Add .lib if file extension does not exist
     newlibs = []
@@ -278,7 +281,9 @@ def get_winscw_compiler_environment(  target,
 
 
     COMPILER_INCLUDE = os.path.normpath( EPOCROOT + "/Epoc32/INCLUDE/GCCE/GCCE.h" )
-    env = Environment( ENV = os.environ,#os.environ['PATH'],
+    env = Environment( 
+                    tools = ["mingw"], # Disable searching of tools
+                    ENV = os.environ,#os.environ['PATH'],
                     # Static library settings
                     AR  = r'mwldsym2',
                     ARFLAGS = "-library -msgstyle gcc -stdlib -subsystem windows -noimplib -o",
@@ -319,7 +324,8 @@ def get_gcce_compiler_environment(  target,
                                     definput     = None,
                                     capabilities = None,
                                     defines      = None,
-                                    allowdlldata = True ):
+                                    allowdlldata = True,
+                                    epocstacksize = None ):
     """Create GCCE building environment
     """
 
@@ -415,7 +421,10 @@ def get_gcce_compiler_environment(  target,
                 """
     if allowdlldata and targettype in DLL_TARGETTYPES:
         ELF2E32 += "--dlldata "
-
+    
+    if epocstacksize is not None and targettype == TARGETTYPE_EXE:
+        ELF2E32 += "--stack=" + "0x" + hex( 0x00010000 ).replace("0x","").zfill( 8 )
+        
     #--output="%(EPOCROOT)sEPOC32\RELEASE\GCCE\%(RELEASE)s\$TARGET"
     #import textwrap
     ELF2E32 = textwrap.dedent( ELF2E32 )
@@ -450,6 +459,7 @@ def get_gcce_compiler_environment(  target,
         
      
     env = Environment (
+                    tools = ["mingw"], # Disable searching of tools
                     ENV = os.environ,
                     # Static library settings
                     AR  = r'arm-none-symbianelf-ar',
