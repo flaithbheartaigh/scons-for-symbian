@@ -19,7 +19,6 @@ from SCons.Builder     import Builder
 from SCons.Options     import Options, EnumOption
 from SCons.Script      import ARGUMENTS, Command, Copy, Execute, Depends, BuildDir
 
-
 #: Easy constant for free caps
 FREE_CAPS = "NetworkServices LocalServices ReadUserData WriteUserData Location UserEnvironment PowerMgmt ProtServ SwEvent SurroundingsDD ReadDeviceData WriteDeviceData TrustedUI".split()
 
@@ -49,7 +48,7 @@ TARGETTYPE_EXE    = "EXE"
 TARGETTYPE_LIB    = "LIB"
 TARGETTYPE_PLUGIN = "PLUGIN"
 TARGETTYPE_PYD    = "PYD"
-
+    
 #: List of possible targettypes
 TARGETTYPES       = [ TARGETTYPE_DLL,
                       TARGETTYPE_EXE,
@@ -57,7 +56,7 @@ TARGETTYPES       = [ TARGETTYPE_DLL,
                       TARGETTYPE_PLUGIN,
                       TARGETTYPE_PYD ]
 
-#: Types, which are actually just dlls
+#: Types, which are compiled not like exe.
 DLL_TARGETTYPES = [ TARGETTYPE_DLL, TARGETTYPE_PYD, TARGETTYPE_LIB ]
 
 #: Maps targettype to correct uid1
@@ -82,6 +81,20 @@ COMPILER   = ARGUMENTS.get( "compiler", COMPILER_WINSCW ).upper()
 #: Urel/Udeb
 RELEASE    = ARGUMENTS.get( "release",  RELEASE_UDEB ).upper()
 
+ENSYMBLE_AVAILABLE = ( ARGUMENTS.get( "dosis",  "False" ).capitalize() == "True" )
+try:
+    if COMPILER != COMPILER_WINSCW and ENSYMBLE_AVAILABLE:
+        import ensymble
+        ENSYMBLE_AVAILABLE = True
+    else:
+        ENSYMBLE_AVAILABLE = False 
+except ImportError:
+    print "Info: Get Ensymble for sis creation support"
+    ENSYMBLE_AVAILABLE = False
+    
+if not ENSYMBLE_AVAILABLE:
+    print "SIS creation disabled"
+    
 #: Built components. One SConstruct can define multiple SymbianPrograms.
 #: This can be used from command-line to build only certain SymbianPrograms
 COMPONENTS = ARGUMENTS.get( "components",  None )
@@ -533,7 +546,10 @@ def SymbianProgram( target, targettype, sources, includes,
                     libraries = None, uid2 = None, uid3 = "0x0",
                     definput = None, capabilities = None,
                     icons = None, resources = None,
-                    rssdefines = None,
+                    rssdefines = None, 
+                    # Sis stuff
+                    package  = "",
+                    ensymbleargs = None,
                     **kwargs ):
     """
     Compiles sources using selected compiler.
@@ -542,6 +558,9 @@ def SymbianProgram( target, targettype, sources, includes,
     @param libraries: Used libraries.
     @param capabilities: Used capabilities. Default: FREE_CAPS
     @param rssdefines: Preprocessor definitions for resource compiler.
+    @param package: Path to installer file. If given, an installer is created automatically.
+    @param ensymbleargs: Arguments to Ensymble simplesis. 1 SymbianProgram must define to create sis.
+                         Use empty dict if no parameters needed.
     @param **kwargs: Keywords passed to C{getenvironment()}
     @return: Last Command. For setting dependencies.
     """
@@ -552,6 +571,7 @@ def SymbianProgram( target, targettype, sources, includes,
         capabilities = FREE_CAPS
     if rssdefines is None:
         rssdefines = []
+     
     if uid2 is None:
         if targettype == TARGETTYPE_EXE:
             uid2 = "0x100039ce"
@@ -695,7 +715,12 @@ def SymbianProgram( target, targettype, sources, includes,
                 env.Depends(res_compile_command, converted_icons)
 
                 includefolder = EPOCROOT + "epoc32\\include"
-                installfolder = COMPILER + r"\private\10003a3f\import\apps"
+                
+                installfolder = [ COMPILER ]
+                if package != "": installfolder.append( package )
+                installfolder.append( r"private\10003a3f\import\apps" )
+                installfolder = os.path.join( *installfolder )
+                 
                 if not os.path.exists(installfolder): os.makedirs(installfolder)
 
                 ## Copy files for sis creation and for simulator
@@ -921,16 +946,20 @@ def SymbianProgram( target, targettype, sources, includes,
                 ]
             )
 
-    # NOTE: For some reason SCons does not understand drive letters with targets
- 
     def copy_result_binary( ):
         """Copy the linked binary( exe, dll ) for emulator
         and to resultables folder.
         """
-        installfolder = COMPILER + "\\sys\\bin\\"
+        installfolder = [ COMPILER ]
+        if package != "": installfolder.append( package )
+        installfolder.append( "sys\\bin\\" ) 
+        installfolder = os.path.join( *installfolder )
+        
         if not os.path.exists(installfolder): os.makedirs(installfolder)
         installfolder += "%s.%s" % ( target, targettype )
-
+        
+        # Combine with installfolder copying
+        # Because the EPOCROOT is not target by default
         postcommands = []
         copysource = TARGET_RESULTABLE % ( "."+targettype)
         target_filename = target + "." + targettype
@@ -949,13 +978,40 @@ def SymbianProgram( target, targettype, sources, includes,
             installed.append( t )
 
         # Last to avoid copying to installfolder if sdkfolder fails
-        postcommands.append( "copy %s %s" % ( copysource, installfolder ) )
-        installed.append(installfolder )
-        returned_command = env.Command( installed , copysource, postcommands )
-
-    #copy_icons()
-    copy_result_binary()
-
+        if targettype != TARGETTYPE_LIB: # No need to install LIBs to device!
+            postcommands.append( "copy %s %s" % ( copysource, installfolder ) )
+            installed.append(installfolder )
+            returned_command = env.Command( installed , copysource, postcommands )
+        
+        return installed
+ 
+    installed = copy_result_binary()
+    
+    def create_install_file( installed ):
+        "Utility for creating an installation package using Ensymble"
+        from ensymble.cmd_simplesis import run as simplesis
+        
+        cmd = []
+        cmd.append( "--uid=%s" % uid3 )
+        
+        for x in ensymbleargs:
+            cmd += [ "--%s=%s" % ( x, ensymbleargs[x] ) ]
+        cmd += [ COMPILER + "\\%s\\" % package, package ]
+        
+        def fcmd( env, target = None, source = None ):
+            try:
+                simplesis( "SCons", cmd )
+            except Exception, msg:
+                return Exception, msg
+            
+        env.Command( package, installed, fcmd )
+        
+    if ENSYMBLE_AVAILABLE and package != "" and ensymbleargs is not None:
+        create_install_file( installed )
+    elif package != "" and targettype != TARGETTYPE_LIB:
+        # package depends on the files anyway
+        env.Depends( package, installed )
+    
     return returned_command
 
 
