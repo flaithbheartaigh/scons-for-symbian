@@ -530,7 +530,7 @@ def get_gcce_compiler_environment(  target,
 #OUTPUT_FOLDER_TEMPLATE = "%(COMPILER)_%(RELEASE)s\\%(TARGET)s_%(TARGETTYPE)s"
 
 def SymbianProgram( target, targettype, sources, includes,
-                    libraries = None, uid2 = "0x0", uid3 = "0x0",
+                    libraries = None, uid2 = None, uid3 = "0x0",
                     definput = None, capabilities = None,
                     icons = None, resources = None,
                     rssdefines = None,
@@ -552,6 +552,12 @@ def SymbianProgram( target, targettype, sources, includes,
         capabilities = FREE_CAPS
     if rssdefines is None:
         rssdefines = []
+    if uid2 is None:
+        if targettype == TARGETTYPE_EXE:
+            uid2 = "0x100039ce"
+        else:
+            uid2 = "0x0"
+    
     rssdefines.append( r'LANGUAGE_SC' )
     
     # Check if stuff exists
