@@ -26,6 +26,5 @@ If you wan't scons-for-symbian to handle your sis creation needs, install [http:
   * Create 'ensymble' folder to 'Python25\Lib\site-packages\'
   * Put the ensymble files there
   * Add __init__.py file to allow importing ensymble.
-
+  * Get the openssl stuff mentioned in the Ensymble readme and put 'em in your PATH.
 Just to be sure. Start python interpreter and try to import ensymble.
-
