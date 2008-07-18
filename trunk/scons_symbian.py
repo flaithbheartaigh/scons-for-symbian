@@ -23,11 +23,10 @@ from SCons.Script      import ARGUMENTS, Command, Copy, Execute, Depends, BuildD
 #: Easy constant for free caps
 FREE_CAPS = "NetworkServices LocalServices ReadUserData WriteUserData Location UserEnvironment PowerMgmt ProtServ SwEvent SurroundingsDD ReadDeviceData WriteDeviceData TrustedUI".split()
 
-
 #: Symbian SDK folder
 EPOCROOT = os.environ["EPOCROOT"]
 
-
+            
 _p = os.environ["PATH"]
 #: Path to arm toolchain. Detected automatically from path using 'CSL Arm Toolchain'
 PATH_ARM_TOOLCHAIN = [ _x for _x in _p.split(";") if "CSL Arm Toolchain\\bin" in _x ][0]
@@ -358,14 +357,20 @@ def get_gcce_compiler_environment(  target,
     # GCCE uses .dso instead of .lib
     #LIBRARIES = [ LIBPATH + x.lower().replace(".lib", ".dso") for x in libraries ]#+ ".dso"
     if targettype == TARGETTYPE_EXE:
-        libraries.append( r"\EPOC32\RELEASE\ARMV5\LIB\eikcore.dso" )
+        libraries.append( SYMBIAN_ARMV5_LIBPATHDSO + "eikcore.dso" )
     else:
-        # Must be first
-        libraries = [ r"\EPOC32\RELEASE\ARMV5\UDEB\edllstub.lib" ] + libraries
+        # edllstub.lib must be just before euser.lib
+        # Required for Tls::Dll
+        # See: http://discussion.forum.nokia.com/forum/archive/index.php/t-59127.html
+        for x in xrange(len(libraries)):
+            lib = libraries[x]
+            if lib.lower().endswith("euser.dso"):
+                libraries.insert( x, SYMBIAN_ARMV5_LIBPATHLIB + "edllstub.lib" )
+                break
         
     libraries = libraries + SYMBIAN_ARMV5_BASE_LIBRARIES
-    #LIBRARIES.sort()
     libraries += LIBARGS
+   
     # Cleanup
     libraries = [ x.replace( "\\\\", "\\") for x in libraries ]
     
@@ -596,20 +601,6 @@ def SymbianProgram( target, targettype, sources, includes,
     #-------------------------------------------------------------- Create icons
     # Copy for emulator at the end using this list, just like binaries.
     def convert_icons():
-
-#
-#        copy_icons_cmds = []
-#        for icon_source in converted_icons:
-#            if COMPILER == COMPILER_WINSCW:
-#                # Copy to SDK to be used with simulator
-#                copy_icons_cmds.append( r"copy %s \epoc32\release\WINSCW\UDEB\Z\resource\apps\\" % ( icon_source ) )
-#                #env.Command( sdkfolder + "\\" + target_filename, copysource, df )
-#
-#            # Last to avoid copying to installfolder if sdkfolder fails
-#            copy_icons_cmds.append( r"copy %s %s" % ( icon_source, icon_install ) )
-#            result_path =  icon_install+ "\\" + os.path.basename(icon_source)
-#            env.Command( result_path, icon_source, copy_icons_cmds )
-
         if icons is not None:
 
             result_install = COMPILER + "\\resource\\apps\\"
@@ -720,19 +711,20 @@ def SymbianProgram( target, targettype, sources, includes,
                 resource_headers.append( includefolder )
 
                 # _reg files copied to \EPOC32\DATA\Z\private\10003a3f\apps\ on simulator
-                if "_reg" in rss_path.lower():
-                    path_private_simulator = r"\EPOC32\DATA\Z\private\10003a3f\apps\%s" % rsc_filename
-                    copy_file( converted_rsc, path_private_simulator )
+                if COMPILER == COMPILER_WINSCW:
+                    if "_reg" in rss_path.lower():
+                        path_private_simulator = r"\EPOC32\DATA\Z\private\10003a3f\apps\%s" % rsc_filename
+                        copy_file( converted_rsc, path_private_simulator )
 
-                    path_private_simulator = r"\Epoc32\release\winscw\udeb\z\private\10003a3f\apps\%s" % rsc_filename
-                    copy_file( converted_rsc, path_private_simulator )
+                        path_private_simulator = r"\Epoc32\release\winscw\udeb\z\private\10003a3f\apps\%s" % rsc_filename
+                        copy_file( converted_rsc, path_private_simulator )
 
-                else: # Copy normal resources to resource\apps folder
-                    path_resource_simulator = r"\EPOC32\DATA\Z\resource\apps\%s" % rsc_filename
-                    copy_file( converted_rsc, path_resource_simulator )
+                    else: # Copy normal resources to resource\apps folder
+                        path_resource_simulator = r"\EPOC32\DATA\Z\resource\apps\%s" % rsc_filename
+                        copy_file( converted_rsc, path_resource_simulator )
 
-                    path_resource_simulator = r"\Epoc32\release\winscw\udeb\z\resource\apps\%s" % rsc_filename
-                    copy_file( converted_rsc, path_resource_simulator )
+                        path_resource_simulator = r"\Epoc32\release\winscw\udeb\z\resource\apps\%s" % rsc_filename
+                        copy_file( converted_rsc, path_resource_simulator )
 
                 header_rsg = env.Command( result_paths, converted_resources, copyres_cmds )
 
@@ -756,7 +748,6 @@ def SymbianProgram( target, targettype, sources, includes,
 
         # GCCE uses .dso instead of .lib
         LIBPATH   = SYMBIAN_ARMV5_LIBPATHDSO
-        #libraries = [ LIBPATH + x.lower().replace(".lib", ".dso") for x in libraries ]
         
         if output_lib:
             libname = target + ".dso"
@@ -944,9 +935,6 @@ def SymbianProgram( target, targettype, sources, includes,
             # Copy to SDK to be used with simulator
             postcommands.append( "copy %s %s" % ( copysource, sdkpath ) )
             installed.append( sdkpath )
-            #env.Command( sdkfolder + "\\" + target_filename, copysource, df )
-
-
 
         if output_libpath is not None and \
         ( COMPILER == COMPILER_WINSCW or targettype == TARGETTYPE_LIB ):
