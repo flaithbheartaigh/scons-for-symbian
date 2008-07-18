@@ -16,4 +16,4 @@ abld build winscw udeb
 
 }}}
 
-So compiling with SCons using 2 parallel jobs grants you over 2x speed improvement. 
+So compiling with SCons using 2 parallel jobs grants you over 2x speed improvement. It is faster even without parallel jobs. The biggest difference comes from startup time of ABLD, when it is thinking what to build( or whatever it does ).
