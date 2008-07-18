@@ -21,7 +21,7 @@ And you should be good to go.
 
 ==== Install Ensymble ( Optional ) ====
 
-If you wan't scons-for-symbian to handle your sis creation needs, install [http://www.nbl.fi/~nbl928/ensymble.html Ensymble]. Get the source package, *DO NOT* get a pre-squeezed version.
+If you want scons-for-symbian to handle your sis creation needs, install [http://www.nbl.fi/~nbl928/ensymble.html Ensymble]. Get the source package, *DO NOT* get a pre-squeezed version.
   * Unpack the archive
   * Create 'ensymble' folder to 'Python25\Lib\site-packages\'
   * Put the ensymble files there
