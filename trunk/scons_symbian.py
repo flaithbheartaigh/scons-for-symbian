@@ -12,12 +12,13 @@ __author__    = "Jussi Toivola"
 __license__   = "MIT License"
 
 import os
+import sys
 import textwrap
 
 from SCons.Environment import Environment
 from SCons.Builder     import Builder
 from SCons.Options     import Options, EnumOption
-from SCons.Script      import ARGUMENTS, Command, Copy, Execute, Depends, BuildDir
+from SCons.Script      import ARGUMENTS, Command, Copy, Execute, Depends, BuildDir, Install
 
 #: Easy constant for free caps
 FREE_CAPS = "NetworkServices LocalServices ReadUserData WriteUserData Location UserEnvironment PowerMgmt ProtServ SwEvent SurroundingsDD ReadDeviceData WriteDeviceData TrustedUI".split()
@@ -25,10 +26,12 @@ FREE_CAPS = "NetworkServices LocalServices ReadUserData WriteUserData Location U
 #: Symbian SDK folder
 EPOCROOT = os.environ["EPOCROOT"]
 
-            
 _p = os.environ["PATH"]
-#: Path to arm toolchain. Detected automatically from path using 'CSL Arm Toolchain'
-PATH_ARM_TOOLCHAIN = [ _x for _x in _p.split(";") if "CSL Arm Toolchain\\bin" in _x ][0]
+CSL_ARM_TOOLCHAIN_FOLDER_NAME = "CSL Arm Toolchain\\bin"
+if sys.platform == "linux2":
+    CSL_ARM_TOOLCHAIN_FOLDER_NAME = "csl-gcc/bin"
+#: Path to arm toolchain. Detected automatically from path using 'CSL Arm Toolchain' on Windows or csl-gcc on Linux
+PATH_ARM_TOOLCHAIN = [ _x for _x in _p.split( os.path.pathsep ) if CSL_ARM_TOOLCHAIN_FOLDER_NAME in _x ][0]
 
 #: Remove drive name from EPOCROOT
 #: Some Symbian tools requires this. TODO: Rewrite 'em and get rid of this thing!    
@@ -37,17 +40,19 @@ if ":" in EPOCROOT:
     
 print "EPOCROOT=%s" % EPOCROOT
 os.environ["EPOCROOT"] = EPOCROOT
+if sys.platform == "win32":
+    os.environ["EPOCROOT"] = os.environ["EPOCROOT"].replace("/", "\\")
+    
+COMPILER_WINSCW = "winscw"
+COMPILER_GCCE   = "gcce"
+RELEASE_UREL    = "urel"
+RELEASE_UDEB    = "udeb"
 
-COMPILER_WINSCW = "WINSCW"
-COMPILER_GCCE   = "GCCE"
-RELEASE_UREL    = "UREL"
-RELEASE_UDEB    = "UDEB"
-
-TARGETTYPE_DLL    = "DLL"
-TARGETTYPE_EXE    = "EXE"
-TARGETTYPE_LIB    = "LIB"
-TARGETTYPE_PLUGIN = "PLUGIN"
-TARGETTYPE_PYD    = "PYD"
+TARGETTYPE_DLL    = "dll"
+TARGETTYPE_EXE    = "exe"
+TARGETTYPE_LIB    = "lib"
+TARGETTYPE_PLUGIN = "plugin"
+TARGETTYPE_PYD    = "pyd"
     
 #: List of possible targettypes
 TARGETTYPES       = [ TARGETTYPE_DLL,
@@ -76,10 +81,10 @@ opt.AddOptions(
           {'winscw':'winscw'}))
 
 #: Used compiler
-COMPILER   = ARGUMENTS.get( "compiler", COMPILER_WINSCW ).upper()
+COMPILER   = ARGUMENTS.get( "compiler", COMPILER_WINSCW ).lower()
 
 #: Urel/Udeb
-RELEASE    = ARGUMENTS.get( "release",  RELEASE_UDEB ).upper()
+RELEASE    = ARGUMENTS.get( "release",  RELEASE_UDEB ).lower()
 
 ENSYMBLE_AVAILABLE = ( ARGUMENTS.get( "dosis",  "False" ).capitalize() == "True" )
 try:
@@ -99,7 +104,7 @@ if not ENSYMBLE_AVAILABLE:
 #: This can be used from command-line to build only certain SymbianPrograms
 COMPONENTS = ARGUMENTS.get( "components",  None )
 if COMPONENTS is not None:
-    COMPONENTS = COMPONENTS.upper().split(",")
+    COMPONENTS = COMPONENTS.lower().split(",")
 
 def __get_defines():
     "Ensure correct syntax for defined strings"
@@ -112,7 +117,7 @@ def __get_defines():
         if "=" in x:
             name, value = x.split("=")
             if not value.isdigit():
-                value = r'\"' + value + r'\"'
+                value = r'/"' + value + r'/"'
 
             x = "=".join( [name, value] )
 
@@ -123,14 +128,15 @@ def __get_defines():
 CMD_LINE_DEFINES = __get_defines()
 
 #: SDK Installation folder
-SDKFOLDER     = r"%sEpoc32\release\%s\%s\\" % (
-                    EPOCROOT,
-                    COMPILER,
-                    RELEASE
+SDKFOLDER     =  os.path.join( EPOCROOT, 
+                               "epoc32", 
+                               "release", 
+                               COMPILER,
+                               RELEASE
                 )
                     
 
-# TODO: freeze # perl -S \epoc32\tools\efreeze.pl %(FROZEN)s %(LIB_DEFS)s
+# TODO: freeze # perl -S /epoc32/tools/efreeze.pl %(FROZEN)s %(LIB_DEFS)s
 print "Building", COMPILER, RELEASE
 print "Defines", CMD_LINE_DEFINES
 
@@ -176,7 +182,7 @@ DEFAULT_GCCE_DEFINES += [
                         "__MARM__",
                         "__EABI__",                        
                         "__MARM_ARMV5__",
-                        ("__PRODUCT_INCLUDE__", '"' + os.path.normpath( EPOCROOT + r'Epoc32/include/variant/Symbian_OS_v9.1.hrh') + '"' )
+                        ("__PRODUCT_INCLUDE__", '"%s"' % ( EPOCROOT + r'epoc32/include/variant/Symbian_OS_v9.1.hrh' ) )
                         ]
 
 DEFAULT_WINSCW_DEFINES = DEFAULT_SYMBIAN_DEFINES[:]
@@ -186,13 +192,13 @@ DEFAULT_WINSCW_DEFINES += [
                         "__WINSCW__"
                         ]
 
-INCLUDES = [ EPOCROOT +'Epoc32/include',
-             EPOCROOT + r"Epoc32\include\variant",
-             #r'D:\Symbian\CSL Arm Toolchain\bin\..\lib\gcc\arm-none-symbianelf\3.4.3\include'
+INCLUDES = [ EPOCROOT +'epoc32/include',
+             EPOCROOT + r"epoc32/include/variant",
+             #r'D:/Symbian/CSL Arm Toolchain/bin/../lib/gcc/arm-none-symbianelf/3.4.3/include'
            ]
-SYMBIAN_ARMV5_LIBPATHDSO = EPOCROOT + r"Epoc32\RELEASE\ARMV5\LIB\\"
-SYMBIAN_ARMV5_LIBPATHLIB = EPOCROOT + r"Epoc32\RELEASE\ARMV5\%s\\" % RELEASE
-SYMBIAN_WINSCW_LIBPATHLIB = EPOCROOT + r"Epoc32\RELEASE\WINSCW\UDEB\\"
+SYMBIAN_ARMV5_LIBPATHDSO  = EPOCROOT + r"epoc32/release/armv5/lib/"
+SYMBIAN_ARMV5_LIBPATHLIB  = EPOCROOT + r"epoc32/release/armv5/%s/" % RELEASE
+SYMBIAN_WINSCW_LIBPATHLIB = EPOCROOT + r"epoc32/release/winscw/udeb/"
 
 #SYMBIAN_ARMV5_BASE_LIBRARIES = [ "drtrvct2_2", "scppnwdl", "drtaeabi", "dfprvct2_2", "dfpaeabi", "usrt2_2" ]
 SYMBIAN_ARMV5_BASE_LIBRARIES =  [ SYMBIAN_ARMV5_LIBPATHLIB + x + ".lib" for x in [ "usrt2_2" ] ]
@@ -206,7 +212,7 @@ WARNINGS =  "-Wall -Wno-ctor-dtor-privacy -Wno-unknown-pragmas -fexceptions " \
 
 
 def get_output_folder(compiler, release, target, targettype ):
-    return "%s_%s\\%s_%s" % (compiler, release, target, targettype )
+    return os.path.join( compiler + "_" + release, target + "_" + targettype )
 
 def getenvironment( *args, **kwargs ):
     env = None
@@ -239,7 +245,7 @@ def get_winscw_compiler_environment(  target,
     OUTPUT_FOLDER = get_output_folder( COMPILER, RELEASE, target, targettype )
 
     LIBPATH   = SYMBIAN_WINSCW_LIBPATHLIB
-    LIBRARIES = [ os.path.normpath(LIBPATH + x ).upper() for x in libraries ]
+    LIBRARIES = [ os.path.normpath(LIBPATH + x ).lower() for x in libraries ]
 
     if defines is None:
         defines = []
@@ -253,19 +259,19 @@ def get_winscw_compiler_environment(  target,
     defines = [ '"%s"' % x for x in defines ]
 
     WINSCW_CC_FLAGS = '-g -O0 -inline off -wchar_t off -align 4 -warnings on -w nohidevirtual,nounusedexpr -msgstyle gcc -enum int -str pool -exc ms -trigraphs on  -nostdinc'
-     #%(EPOCROOT)sEPOC32\RELEASE\WINSCW\UDEB\euser.lib %(EPOCROOT)sEPOC32\RELEASE\WINSCW\UDEB\efsrv.lib
+     #%(EPOCROOT)sepoc32/RELEASE/WINSCW/UDEB/euser.lib %(EPOCROOT)sepoc32/release/WINSCW/UDEB/efsrv.lib
     LINKFLAGS = ""
     if targettype in DLL_TARGETTYPES:
         LINKFLAGS     = """
                     -msgstyle gcc
-                    -stdlib "%(EPOCROOT)sEPOC32\RELEASE\WINSCW\UDEB\EDLL.LIB"
+                    -stdlib "%(EPOCROOT)sepoc32/release/winscw/udeb/edll.lib"
                     -noentry -shared
                     -subsystem windows
                     -g
                     -export dllexport
                     -m __E32Dll
                     -nocompactimportlib
-                    -implib %(OUTPUT_FOLDER)s\\%(TARGET)s._tmp_lib
+                    -implib %(OUTPUT_FOLDER)s/%(TARGET)s._tmp_lib
                     -addcommand "out:%(TARGET)s._tmp_%(TARGETTYPE)s"
                     -warnings off
                      """
@@ -273,7 +279,7 @@ def get_winscw_compiler_environment(  target,
     elif targettype == TARGETTYPE_EXE:
         LINKFLAGS     = """
                     -msgstyle gcc
-                    -stdlib "%(EPOCROOT)sEPOC32\RELEASE\WINSCW\UDEB\EEXE.LIB"
+                    -stdlib "%(EPOCROOT)sepoc32/release/winscw/udeb/eexe.lib"
                     -m "?_E32Bootstrap@@YGXXZ"
                     -subsystem windows -g
                     -noimplib
@@ -292,7 +298,7 @@ def get_winscw_compiler_environment(  target,
                              "OUTPUT_FOLDER": OUTPUT_FOLDER }
 
 
-    COMPILER_INCLUDE = os.path.normpath( EPOCROOT + "/Epoc32/INCLUDE/GCCE/GCCE.h" )
+    COMPILER_INCLUDE = os.path.normpath( EPOCROOT + "/epoc32/include/gcce/gcce.h" )
     env = Environment( 
                     tools = ["mingw"], # Disable searching of tools
                     ENV = os.environ,#os.environ['PATH'],
@@ -315,8 +321,8 @@ def get_winscw_compiler_environment(  target,
                    # Linker settings
                     LINK    = r'mwldsym2',
 #                     LIBPATH = [
-#                                  r"D:\Symbian\CSL Arm Toolchain\lib\gcc\arm-none-symbianelf\3.4.3",
-#                                  r"D:\Symbian\CSL Arm Toolchain\arm-none-symbianelf\lib"
+#                                  r"D:/Symbian/CSL Arm Toolchain/lib/gcc/arm-none-symbianelf/3.4.3",
+#                                  r"D:/Symbian/CSL Arm Toolchain/arm-none-symbianelf/lib"
 #                               ],
                     LINKFLAGS     = LINKFLAGS,
                     LIBS          = LIBRARIES,
@@ -385,10 +391,10 @@ def get_gcce_compiler_environment(  target,
     libraries += LIBARGS
    
     # Cleanup
-    libraries = [ x.replace( "\\\\", "\\") for x in libraries ]
+    libraries = [ x.replace( "\\\\", "/") for x in libraries ]
     
     #import pdb;pdb.set_trace()
-    COMPILER_INCLUDE = os.path.abspath( EPOCROOT + "Epoc32\\INCLUDE\\GCCE\\GCCE.h" )
+    COMPILER_INCLUDE = os.path.abspath( EPOCROOT + "epoc32/include/gcce/gcce.h" )
 
     # TODO: Cleanup following mess
     
@@ -407,14 +413,14 @@ def get_gcce_compiler_environment(  target,
         LINKFLAGS +="""
                     --entry _E32Dll  -u _E32Dll
                     """
-                    
+    
     LINKFLAGS     +=r"""
-                    %(EPOCROOT)sEpoc32\RELEASE\ARMV5\UREL\EDLL.LIB
-                    -Map %(EPOCROOT)sEpoc32\RELEASE\GCCE\UREL\%(TARGET)s.%(TARGETTYPE)s.map
+                    %(EPOCROOT)sepoc32/release/armv5/urel/edll.lib
+                    -Map %(EPOCROOT)sepoc32/release/gcce/urel/%(TARGET)s.%(TARGETTYPE)s.map
                     """
 
     if targettype == TARGETTYPE_EXE:
-        LINKFLAGS = LINKFLAGS.replace( "EDLL.LIB", "EEXE.LIB" )
+        LINKFLAGS = LINKFLAGS.replace( "edll.lib", "eexe.lib" )
 
     LINKFLAGS = textwrap.dedent( LINKFLAGS )
     LINKFLAGS = " ".join( [ x.strip() for x in LINKFLAGS.split("\n") ] )
@@ -427,15 +433,15 @@ def get_gcce_compiler_environment(  target,
     
     #--vid=0x00000000
     ELF2E32 =   r"""
-                %(EPOCROOT)sEpoc32\Tools\elf2e32 --sid=%(UID3)s
+                %(EPOCROOT)sepoc32/tools/elf2e32 --sid=%(UID3)s
                 --uid1=%(UID1)s --uid2=%(UID2)s --uid3=%(UID3)s
                 --capability=%(CAPABILITIES)s
                 --fpu=softvfp --targettype=%(TARGETTYPE)s
                 --output=$TARGET
                 %(DEFCONFIG)s
-                --elfinput="%(WORKING_DIR)s\$SOURCE"
+                --elfinput="%(WORKING_DIR)s/$SOURCE"
                 --linkas=%(TARGET)s{000a0000}[%(UID3)s].%(TARGETTYPE)s
-                --libpath="%(EPOCROOT)sEPOC32\RELEASE\ARMV5\LIB"
+                --libpath="%(EPOCROOT)sepoc32/release/armv5/lib"
                 """
     if allowdlldata and targettype in DLL_TARGETTYPES:
         ELF2E32 += "--dlldata "
@@ -443,7 +449,7 @@ def get_gcce_compiler_environment(  target,
     if epocstacksize is not None and targettype == TARGETTYPE_EXE:
         ELF2E32 += "--stack=" + "0x" + hex( 0x00010000 ).replace("0x","").zfill( 8 )
         
-    #--output="%(EPOCROOT)sEPOC32\RELEASE\GCCE\%(RELEASE)s\$TARGET"
+    #--output="%(EPOCROOT)sepoc32/release/GCCE/%(release)s/$TARGET"
     #import textwrap
     ELF2E32 = textwrap.dedent( ELF2E32 )
     ELF2E32 = " ".join( [ x.strip() for x in ELF2E32.split("\n") ] )
@@ -468,14 +474,11 @@ def get_gcce_compiler_environment(  target,
             defconfig +=  ["--definput " + definput]
         defconfig += ["--defoutput " + target + "{000a0000}.def" ]
         defconfig += ["--unfrozen" ]
-        defconfig += ["--dso " + os.environ["EPOCROOT"] + "EPOC32\RELEASE\ARMV5\LIB\\" + target + ".dso"]
+        defconfig += ["--dso " + os.environ["EPOCROOT"] + "epoc32/release/ARMV5/LIB/" + target + ".dso"]
         defconfig = " ".join( defconfig )
 
         uid1 = TARGETTYPE_UID_MAP[TARGETTYPE_DLL]#"0x10000079" # DLL
-
-
-        
-     
+ 
     env = Environment (
                     tools = ["mingw"], # Disable searching of tools
                     ENV = os.environ,
@@ -497,8 +500,8 @@ def get_gcce_compiler_environment(  target,
                     # Linker settings
                     LINK    = r'"arm-none-symbianelf-ld"',
                     LIBPATH = [ PATH_ARM_TOOLCHAIN + x for x in [
-                                r"\..\lib\gcc\arm-none-symbianelf\3.4.3",
-                                r"\..\arm-none-symbianelf\lib"
+                                r"/../lib/gcc/arm-none-symbianelf/3.4.3",
+                                r"/../arm-none-symbianelf/lib"
                                 ] 
                               ],
                     LINKFLAGS     = LINKFLAGS,
@@ -513,7 +516,7 @@ def get_gcce_compiler_environment(  target,
     elf2e32_cmd = ELF2E32 % { "EPOCROOT"    : EPOCROOT,
                           "CAPABILITIES": "+".join( capabilities ),
                           "TARGET"      : target,
-                          "RELEASE"     : RELEASE,
+                          "release"     : RELEASE,
                           "WORKING_DIR" : os.path.abspath("."),
                           "TARGETTYPE"  : elf_targettype,
                           "UID1"        : uid1,
@@ -521,11 +524,11 @@ def get_gcce_compiler_environment(  target,
                           "UID3"        : uid3,
                           "DEFCONFIG"   : defconfig }
 
-    elf2e32_output = r"%(EPOCROOT)sEPOC32\RELEASE\GCCE\%(RELEASE)s\\" % \
-                        { "EPOCROOT" : EPOCROOT,
-                          "RELEASE"  : RELEASE }
+    #elf2e32_output = r"%(EPOCROOT)sepoc32/release/GCCE/%(RELEASE)s/" % \
+    #                    { "EPOCROOT" : EPOCROOT,
+    #                      "RELEASE"  : RELEASE }
 
-    elf2e32_builder = Builder( action     = elf2e32_cmd,
+    elf2e32_builder = Builder( action     = elf2e32_cmd.replace("\\", "/"),
                        src_suffix = ".noelfexe",
                        suffix     = "." + targettype,
                        #prefix     = elf2e32_output,
@@ -593,7 +596,7 @@ def SymbianProgram( target, targettype, sources, includes,
 
 
     # Is this Symbian component enabled?
-    component_name = ".".join( [ target, targettype] ).upper()
+    component_name = ".".join( [ target, targettype] ).lower()
     #print COMPONENTS
     if COMPONENTS is not None:
         if component_name not in COMPONENTS:
@@ -605,13 +608,13 @@ def SymbianProgram( target, targettype, sources, includes,
     #if icons is None:
     #    icons = []
     OUTPUT_FOLDER = get_output_folder(COMPILER,RELEASE, target, targettype )
-    sources = [ OUTPUT_FOLDER + "\\" + x for x in sources ]
+    sources = [ OUTPUT_FOLDER + "/" + x for x in sources ]
     # This is needed often
     FOLDER_TARGET_TUPLE = ( OUTPUT_FOLDER, target )
     if not os.path.exists(OUTPUT_FOLDER): os.makedirs( OUTPUT_FOLDER )
 
     # Just give type of the file
-    TARGET_RESULTABLE   = "%s\\%s" % FOLDER_TARGET_TUPLE + "%s"
+    TARGET_RESULTABLE   = "%s/%s" % FOLDER_TARGET_TUPLE + "%s"
 
     env = getenvironment( target, targettype,
                           includes,
@@ -629,20 +632,20 @@ def SymbianProgram( target, targettype, sources, includes,
     def convert_icons():
         if icons is not None:
 
-            result_install = COMPILER + "\\resource\\apps\\"
-            sdk_resource = r"\EPOC32\DATA\Z\resource\apps\%s"
+            result_install = COMPILER + "/resource/apps/"
+            sdk_resource = EPOCROOT + r"epoc32/DATA/Z/resource/apps/%s"
 
             if not os.path.exists(result_install): os.makedirs(result_install)
             result_install += "%s"
 
             # Creates 32 bit icons
-            convert_icons_cmd = r'\epoc32\tools\mifconv "%s" /c32 "%s"'
-
+            convert_icons_cmd = ( EPOCROOT + r'epoc32/tools/mifconv "%s" /c32 "%s"' ).replace("\\", "/" )
+            
             # TODO: Accept 2-tuple, first is the source, second: resulting name
-            icon_target_path = OUTPUT_FOLDER + "\\%s_aif.mif"
-            icon_targets = [] # Icons at WINSCW\...
-            sdk_icons    = [] # Icons at \epoc32
-            copyres_cmds = [] # Commands to copy icons from WINSCW\ to \epoc32
+            icon_target_path = OUTPUT_FOLDER + "/%s_aif.mif"
+            icon_targets = [] # Icons at WINSCW/...
+            sdk_icons    = [] # Icons at /epoc32
+            copyres_cmds = [] # Commands to copy icons from WINSCW/ to /epoc32
             for x in icons:
                 tmp = icon_target_path % ( target )
                 icon_targets.append( tmp )
@@ -650,7 +653,7 @@ def SymbianProgram( target, targettype, sources, includes,
                 env.Command( tmp, x, convert_icons_cmd % ( tmp, x ) )
 
                 sdk_target = sdk_resource % os.path.basename(tmp)
-                copyres_cmds.append( "copy %s %s" % ( tmp, sdk_target ) )
+                copyres_cmds.append( Copy( sdk_target, tmp ) )#"copy %s %s" % ( tmp, sdk_target ) )
                 sdk_icons.append( sdk_target )
             #import pdb;pdb.set_trace()
             return env.Command( sdk_icons, icon_targets, copyres_cmds )
@@ -666,12 +669,12 @@ def SymbianProgram( target, targettype, sources, includes,
         """
         Compile resources and copy for sis creation and for simulator.
         .RSC
-            -> \EPOC32\DATA\Z\resource\apps\
-            -> \Epoc32\release\winscw\udeb\z\resource\apps\
+            -> /epoc32/DATA/Z/resource/apps/
+            -> /epoc32/release/winscw/udeb/z/resource/apps/
         _reg.RSC
-            -> epoc32\release\winscw\udeb\z\private\10003a3f\apps\
-            -> epoc32\DATA\Z\private\10003a3f\apps\
-        .RSG     -> epoc32\include\
+            -> epoc32/release/winscw/udeb/z/private/10003a3f/apps/
+            -> epoc32/DATA/Z/private/10003a3f/apps/
+        .RSG     -> epoc32/include/
         """
         converted_resources = []
         resource_headers = []
@@ -680,17 +683,18 @@ def SymbianProgram( target, targettype, sources, includes,
             res_includes = "-I " + " -I ".join( includes + INCLUDES )
             res_defines   = "-D" + " -D".join( rssdefines )
             convert_res_cmd = " ".join( [
-                r'perl -S %sepoc32\tools\epocrc.pl' % EPOCROOT,
+                r'perl -S',
+                os.path.join( EPOCROOT, "epoc32", "tools", "epocrc.pl" ),
                 r'-m045,046,047 -I-',
                 res_includes,
                 res_defines,
                 r'-u "%(SOURCEPATH)s"',
-                '-o"%(OUTPUT_FOLDER)s\\%(RESOURCE)s.RSC"',
-                '-h"%(OUTPUT_FOLDER)s\\%(RESOURCE)s.rsg"',
-                #r'-t"\EPOC32\BUILD\Projects\LoggingServer\LoggingServerGUI\group\LOGGINGSERVERGUI\WINSCW"',
-                #r'-l"Z\resource\apps:\Projects\LoggingServer\LoggingServerGUI\group"',
-            ] )
-
+                '-o"%(OUTPUT_FOLDER)s/%(RESOURCE)s.RSC"',
+                '-h"%(OUTPUT_FOLDER)s/%(RESOURCE)s.rsg"',
+                #r'-t"/epoc32/BUILD/Projects/LoggingServer/LoggingServerGUI/group/LOGGINGSERVERGUI/WINSCW"',
+                #r'-l"Z/resource/apps:/Projects/LoggingServer/LoggingServerGUI/group"',
+            ] ).replace("/", "\\" )
+            
             # Make the resources dependent on previous resource
             # Thus the resources must be listed in correct order.
             prev_resource = None
@@ -702,8 +706,8 @@ def SymbianProgram( target, targettype, sources, includes,
                                           "RESOURCE"      : rss_notype,
                                           "SOURCEPATH"    : rss_path }
 
-                converted_rsg = OUTPUT_FOLDER + "\\%s.RSG" % rss_notype
-                converted_rsc = OUTPUT_FOLDER + "\\%s.RSC" % rss_notype
+                converted_rsg = OUTPUT_FOLDER + "/%s.RSG" % rss_notype
+                converted_rsc = OUTPUT_FOLDER + "/%s.RSC" % rss_notype
 
                 result_paths  = [ ]
                 copyres_cmds = [ ]
@@ -714,47 +718,48 @@ def SymbianProgram( target, targettype, sources, includes,
                 res_compile_command = env.Command( [converted_rsc, converted_rsg], rss_path, cmd )
                 env.Depends(res_compile_command, converted_icons)
 
-                includefolder = EPOCROOT + "epoc32\\include"
+                includefolder = EPOCROOT + "epoc32/include"
                 
                 installfolder = [ COMPILER ]
                 if package != "": installfolder.append( package )
-                installfolder.append( r"private\10003a3f\import\apps" )
+                installfolder.append( r"private/10003a3f/import/apps" )
                 installfolder = os.path.join( *installfolder )
                  
                 if not os.path.exists(installfolder): os.makedirs(installfolder)
 
                 ## Copy files for sis creation and for simulator
                 def copy_file( source_path, target_path ):
-                    copy_cmd = "copy %s %s" % ( source_path, target_path )
+                    copy_cmd = Copy( target_path, source_path )
+                    #"copy %s %s" % ( source_path, target_path )
                     copyres_cmds.append( copy_cmd )
                     result_paths.append( target_path )
 
                 rsc_filename = "%s.%s" % ( rss_notype, "rsc" )
-                installfolder += "\\" + rsc_filename
+                installfolder += "/" + rsc_filename
                 # Copy to sis creation folder
                 copy_file( converted_rsc, installfolder )
 
-                # Copy to \epoc32\include\
-                includefolder += "\\%s.%s" % ( rss_notype, "rsg" )
+                # Copy to /epoc32/include/
+                includefolder += "/%s.%s" % ( rss_notype, "rsg" )
                 copy_file( converted_rsg, includefolder )
 
                 # Add created header to be added for build dependency
                 resource_headers.append( includefolder )
 
-                # _reg files copied to \EPOC32\DATA\Z\private\10003a3f\apps\ on simulator
+                # _reg files copied to /epoc32/DATA/Z/private/10003a3f/apps/ on simulator
                 if COMPILER == COMPILER_WINSCW:
                     if "_reg" in rss_path.lower():
-                        path_private_simulator = r"\EPOC32\DATA\Z\private\10003a3f\apps\%s" % rsc_filename
+                        path_private_simulator = EPOCROOT + r"epoc32/DATA/Z/private/10003a3f/apps/%s" % rsc_filename
                         copy_file( converted_rsc, path_private_simulator )
 
-                        path_private_simulator = r"\Epoc32\release\winscw\udeb\z\private\10003a3f\apps\%s" % rsc_filename
+                        path_private_simulator = EPOCROOT +  r"epoc32/release/winscw/udeb/z/private/10003a3f/apps/%s" % rsc_filename
                         copy_file( converted_rsc, path_private_simulator )
 
-                    else: # Copy normal resources to resource\apps folder
-                        path_resource_simulator = r"\EPOC32\DATA\Z\resource\apps\%s" % rsc_filename
+                    else: # Copy normal resources to resource/apps folder
+                        path_resource_simulator = EPOCROOT + r"epoc32/DATA/Z/resource/apps/%s" % rsc_filename
                         copy_file( converted_rsc, path_resource_simulator )
 
-                        path_resource_simulator = r"\Epoc32\release\winscw\udeb\z\resource\apps\%s" % rsc_filename
+                        path_resource_simulator = EPOCROOT + r"epoc32/release/winscw/udeb/z/resource/apps/%s" % rsc_filename
                         copy_file( converted_rsc, path_resource_simulator )
 
                 header_rsg = env.Command( result_paths, converted_resources, copyres_cmds )
@@ -768,7 +773,7 @@ def SymbianProgram( target, targettype, sources, includes,
 
     converted_resources, resource_headers = convert_resources()
 
-    # To be copied to \EPOC32\RELEASE\WINSCW\UDEB\
+    # To be copied to /epoc32/release/WINSCW/UDEB/
     output_libpath = None
     returned_command = None
 
@@ -782,7 +787,7 @@ def SymbianProgram( target, targettype, sources, includes,
         
         if output_lib:
             libname = target + ".dso"
-            output_libpath = ( r"\EPOC32\RELEASE\%s\%s\%s" % ( "ARMV5", "Lib", libname ) )
+            output_libpath = ( EPOCROOT + r"epoc32/release/%s/%s/%s" % ( "armv5", "lib", libname ) )
 
         build_prog = None
         if targettype != TARGETTYPE_LIB:
@@ -806,7 +811,7 @@ def SymbianProgram( target, targettype, sources, includes,
         else:
             build_prog = env.StaticLibrary( TARGET_RESULTABLE % ".lib" , sources )
             output_libpath = ( TARGET_RESULTABLE % ".lib",
-                                r"\EPOC32\RELEASE\ARMV5\%s\\%s.lib" % ( RELEASE, target ) )
+                                EPOCROOT + r"epoc32/release/armv5/%s/%s.lib" % ( RELEASE, target ) )
                                 
         
         #return
@@ -851,20 +856,20 @@ def SymbianProgram( target, targettype, sources, includes,
             resultables.append(resultable_path )
             #resultables.append( TARGET_RESULTABLE % ".inf" )
             output_libpath = ( TARGET_RESULTABLE % ".lib",
-                                r"\EPOC32\RELEASE\%s\%s\\" % ( COMPILER, RELEASE ) + libname )
+                                EPOCROOT + r"epoc32/release/%s/%s/" % ( COMPILER, RELEASE ) + libname )
         
         if targettype != TARGETTYPE_LIB:
             build_prog = env.Program( resultables, sources )
             # Depends on the used libraries. This has a nice effect since if,
             # this project depends on one of the other projects/components/dlls/libs
             # the depended project is automatically built first.
-            env.Depends( build_prog, [ r"\EPOC32\RELEASE\%s\%s\\%s" % ( COMPILER, RELEASE, libname ) for libname in libraries] )
+            env.Depends( build_prog, [ r"/epoc32/release/%s/%s/%s" % ( COMPILER, RELEASE, libname ) for libname in libraries] )
             env.Depends( build_prog, converted_icons )
             env.Depends( build_prog, resource_headers )
         else:
             build_prog = env.StaticLibrary( TARGET_RESULTABLE % ".lib" , sources )
             output_libpath = ( TARGET_RESULTABLE % ".lib",
-                                r"\EPOC32\RELEASE\WINSCW\%s\\%s.lib" % ( RELEASE, target ) )
+                                r"/epoc32/release/WINSCW/%s/%s.lib" % ( RELEASE, target ) )
         
         if output_lib and targettype != TARGETTYPE_LIB:
             # Create .inf file
@@ -878,7 +883,7 @@ def SymbianProgram( target, targettype, sources, includes,
                 # Creates <target>.lib
                 'mwldsym2.exe -S -show only,names,unmangled,verbose -o "%s" "%s"' % ( TARGET_RESULTABLE % ".inf", TARGET_RESULTABLE % "._tmp_lib" ),
                 # Creates def file
-                r'perl -S %EPOCROOT%epoc32\tools\makedef.pl -absent __E32Dll ' + '-Inffile "%s" ' % ( TARGET_RESULTABLE % ".inf" )
+                r'perl -S %EPOCROOT%epoc32/tools/makedef.pl -absent __E32Dll ' + '-Inffile "%s" ' % ( TARGET_RESULTABLE % ".inf" )
                 + definput
                 + ' "%s"' % ( TARGET_RESULTABLE % '.def' ) ] )
             #print action
@@ -886,7 +891,7 @@ def SymbianProgram( target, targettype, sources, includes,
             defbld = Builder( action = action,
                               ENV = os.environ )
             env.Append( BUILDERS = {'Def' : defbld} )
-            env.Def( #COMPILER+ "\\" + target + ".inf",
+            env.Def( #COMPILER+ "/" + target + ".inf",
                        #TARGET_RESULTABLE % ".inf",
                        TARGET_RESULTABLE % ".def",
                        TARGET_RESULTABLE % "._tmp_lib" )
@@ -905,7 +910,7 @@ def SymbianProgram( target, targettype, sources, includes,
         objects = [ os.path.basename( x ) for x in object_paths ]
         objects = " ".join( objects )
 
-        libfolder = "%EPOCROOT%EPOC32\RELEASE\WINSCW\UDEB\\"
+        libfolder = "%EPOCROOT%epoc32/release/winscw/udeb/"
         libs      = [ libfolder + x for x in libraries]
 
         if targettype in DLL_TARGETTYPES and targettype != TARGETTYPE_LIB:
@@ -913,8 +918,8 @@ def SymbianProgram( target, targettype, sources, includes,
             env.Command( TARGET_RESULTABLE % ("." + targettype ), [ temp_dll_path, TARGET_RESULTABLE % ".def" ],
             [
                 " ".join( [
-                            'mwldsym2.exe -msgstyle gcc',
-                            '-stdlib %EPOCROOT%EPOC32\RELEASE\WINSCW\UDEB\EDLL.LIB -noentry',
+                            'mwldsym2 -msgstyle gcc',
+                            '-stdlib %EPOCROOT%epoc32/release/winscw/udeb/edll.lib -noentry',
                             '-shared -subsystem windows',
                             '-g %s' % " ".join( libs ),
                             '-o "%s"' % temp_dll_path,
@@ -931,9 +936,9 @@ def SymbianProgram( target, targettype, sources, includes,
         elif targettype == TARGETTYPE_EXE:
             env.Command( TARGET_RESULTABLE % ".exe", temp_dll_path,
                 [
-                " ".join( [ 'mwldsym2.exe',
+                " ".join( [ 'mwldsym2',
                             '-msgstyle gcc',
-                            '-stdlib %EPOCROOT%EPOC32\RELEASE\WINSCW\UDEB\EEXE.LIB',
+                            '-stdlib %EPOCROOT%epoc32/release/winscw/udeb/eexe.lib',
                             '-m "?_E32Bootstrap@@YGXXZ"',
                             '-subsystem windows',
                             '-g %s' % " ".join( libs ),
@@ -952,35 +957,35 @@ def SymbianProgram( target, targettype, sources, includes,
         """
         installfolder = [ COMPILER ]
         if package != "": installfolder.append( package )
-        installfolder.append( "sys\\bin\\" ) 
+        installfolder.append( "sys/bin/" ) 
         installfolder = os.path.join( *installfolder )
         
         if not os.path.exists(installfolder): os.makedirs(installfolder)
-        installfolder += "%s.%s" % ( target, targettype )
+        installpath = installfolder + "%s.%s" % ( target, targettype )
         
         # Combine with installfolder copying
         # Because the EPOCROOT is not target by default
         postcommands = []
         copysource = TARGET_RESULTABLE % ( "."+targettype)
         target_filename = target + "." + targettype
-        sdkpath       = SDKFOLDER + "\\" + target_filename
+        sdkpath       = SDKFOLDER + "/" + target_filename
 
         installed = []
         if COMPILER == COMPILER_WINSCW:
             # Copy to SDK to be used with simulator
-            postcommands.append( "copy %s %s" % ( copysource, sdkpath ) )
+            postcommands.append( Copy( sdkpath, copysource ) )#"copy %s %s" % ( copysource, sdkpath ) )
             installed.append( sdkpath )
 
         if output_libpath is not None and \
         ( COMPILER == COMPILER_WINSCW or targettype == TARGETTYPE_LIB ):
             s,t = output_libpath
-            postcommands.append( "copy %s %s" % ( s, t ) )
+            postcommands.append( Copy( t, s ) )#"copy %s %s" % ( s, t ) )
             installed.append( t )
 
-        # Last to avoid copying to installfolder if sdkfolder fails
+        # Last to avoid copying to installpath if sdkfolder fails
         if targettype != TARGETTYPE_LIB: # No need to install LIBs to device!
-            postcommands.append( "copy %s %s" % ( copysource, installfolder ) )
-            installed.append(installfolder )
+            postcommands.append( Copy( installpath, copysource ) )#"copy %s %s" % ( copysource, installfolder ) )
+            installed.append(installpath )
             returned_command = env.Command( installed , copysource, postcommands )
         
         return installed
@@ -996,7 +1001,7 @@ def SymbianProgram( target, targettype, sources, includes,
         
         for x in ensymbleargs:
             cmd += [ "--%s=%s" % ( x, ensymbleargs[x] ) ]
-        cmd += [ COMPILER + "\\%s\\" % package, package ]
+        cmd += [ COMPILER + "/%s/" % package, package ]
         
         def fcmd( env, target = None, source = None ):
             try:
@@ -1015,3 +1020,4 @@ def SymbianProgram( target, targettype, sources, includes,
     return returned_command
 
 
+    
