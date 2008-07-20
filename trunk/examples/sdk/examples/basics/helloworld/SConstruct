@@ -1,0 +1,24 @@
+#!/usr/env/bin python
+# Copy to EPOCROOT\examples\basics\helloworld
+import os
+import glob
+
+from scons_symbian import *
+ 
+COMMON_DEFINES = []
+
+def Helloworld():
+    sources  = glob.glob( "*.cpp" )
+    inc      = [ r"../commonframework",
+                 r".",
+                 EPOCROOT + r"epoc32/include"
+               ]
+    libs = ["euser"]
+    
+    return SymbianProgram( 'helloworld', TARGETTYPE_EXE,
+                            sources, inc, libs,
+
+                            capabilities = FREE_CAPS,
+                            defines      = COMMON_DEFINES ) 
+ 
+Helloworld()
