@@ -14,6 +14,7 @@ __license__   = "MIT License"
 import os
 import sys
 import textwrap
+from os.path import join
 
 from SCons.Environment import Environment
 from SCons.Builder     import Builder
@@ -30,6 +31,7 @@ _p = os.environ["PATH"]
 CSL_ARM_TOOLCHAIN_FOLDER_NAME = "CSL Arm Toolchain\\bin"
 if sys.platform == "linux2":
     CSL_ARM_TOOLCHAIN_FOLDER_NAME = "csl-gcc/bin"
+    
 #: Path to arm toolchain. Detected automatically from path using 'CSL Arm Toolchain' on Windows or csl-gcc on Linux
 PATH_ARM_TOOLCHAIN = [ _x for _x in _p.split( os.path.pathsep ) if CSL_ARM_TOOLCHAIN_FOLDER_NAME in _x ][0]
 
@@ -39,9 +41,10 @@ if ":" in EPOCROOT:
     EPOCROOT = EPOCROOT.split(":",1)[-1]
     
 print "EPOCROOT=%s" % EPOCROOT
-os.environ["EPOCROOT"] = EPOCROOT
 if sys.platform == "win32":
-    os.environ["EPOCROOT"] = os.environ["EPOCROOT"].replace("/", "\\")
+    os.environ["EPOCROOT"] = EPOCROOT.replace("/", "\\")
+else:
+    os.environ["EPOCROOT"] = EPOCROOT
     
 COMPILER_WINSCW = "winscw"
 COMPILER_GCCE   = "gcce"
@@ -680,20 +683,20 @@ def SymbianProgram( target, targettype, sources, includes,
         resource_headers = []
 
         if resources is not None:
-            res_includes = "-I " + " -I ".join( includes + INCLUDES )
-            res_defines   = "-D" + " -D".join( rssdefines )
-            convert_res_cmd = " ".join( [
-                r'perl -S',
-                os.path.join( EPOCROOT, "epoc32", "tools", "epocrc.pl" ),
-                r'-m045,046,047 -I-',
-                res_includes,
-                res_defines,
-                r'-u "%(SOURCEPATH)s"',
-                '-o"%(OUTPUT_FOLDER)s/%(RESOURCE)s.RSC"',
-                '-h"%(OUTPUT_FOLDER)s/%(RESOURCE)s.rsg"',
-                #r'-t"/epoc32/BUILD/Projects/LoggingServer/LoggingServerGUI/group/LOGGINGSERVERGUI/WINSCW"',
-                #r'-l"Z/resource/apps:/Projects/LoggingServer/LoggingServerGUI/group"',
-            ] ).replace("/", "\\" )
+            #res_includes = "-I " + " -I ".join( includes + INCLUDES )
+            #res_defines   = "-D" + " -D".join( rssdefines )
+#             convert_res_cmd = " ".join( [
+#                 r'perl -S',
+#                 os.path.join( EPOCROOT, "epoc32", "tools", "epocrc.pl" ),
+#                 r'-v -m045,046,047 -I-',
+#                 res_includes,
+#                 res_defines,
+#                 r'-u "%(SOURCEPATH)s"',
+#                 '-o"%(OUTPUT_FOLDER)s/%(RESOURCE)s.RSC"',
+#                 '-h"%(OUTPUT_FOLDER)s/%(RESOURCE)s.rsg"',
+#                 #r'-t"/epoc32/BUILD/Projects/LoggingServer/LoggingServerGUI/group/LOGGINGSERVERGUI/WINSCW"',
+#                 #r'-l"Z/resource/apps:/Projects/LoggingServer/LoggingServerGUI/group"',
+#             ] )
             
             # Make the resources dependent on previous resource
             # Thus the resources must be listed in correct order.
@@ -701,13 +704,11 @@ def SymbianProgram( target, targettype, sources, includes,
             
             for rss_path in resources:
                 rss_notype = ".".join(os.path.basename(rss_path).split(".")[:-1]) # ignore rss
-
-                cmd = convert_res_cmd % { "OUTPUT_FOLDER" : OUTPUT_FOLDER,
-                                          "RESOURCE"      : rss_notype,
-                                          "SOURCEPATH"    : rss_path }
-
-                converted_rsg = OUTPUT_FOLDER + "/%s.RSG" % rss_notype
-                converted_rsc = OUTPUT_FOLDER + "/%s.RSC" % rss_notype
+                converted_rsg = join( OUTPUT_FOLDER, "%s.rsg" % rss_notype )
+                converted_rsc = join( OUTPUT_FOLDER, "%s.rsc" % rss_notype )
+                platinc = EPOCROOT + join( "epoc32", "include", "variant", "symbian_os_v9.1.hrh" )
+                import rcomp
+                
 
                 result_paths  = [ ]
                 copyres_cmds = [ ]
@@ -715,14 +716,22 @@ def SymbianProgram( target, targettype, sources, includes,
                 converted_resources.append( converted_rsc )
 
                 # Compile resource files
-                res_compile_command = env.Command( [converted_rsc, converted_rsg], rss_path, cmd )
+                #res_compile_command = env.Command( [converted_rsc, converted_rsg], rss_path, cmd )
+                import rcomp
+                res_compile_command = rcomp.RComp( env, converted_rsc, converted_rsg,
+                             rss_path,
+                             "-m045,046,047",
+                             includes + INCLUDES,
+                             [platinc],
+                             rssdefines )
+                             
                 env.Depends(res_compile_command, converted_icons)
 
-                includefolder = EPOCROOT + "epoc32/include"
+                includefolder = EPOCROOT + join( "epoc32", "include" )
                 
                 installfolder = [ COMPILER ]
                 if package != "": installfolder.append( package )
-                installfolder.append( r"private/10003a3f/import/apps" )
+                installfolder.append( join( "private","10003a3f","import","apps" ) )
                 installfolder = os.path.join( *installfolder )
                  
                 if not os.path.exists(installfolder): os.makedirs(installfolder)
@@ -740,11 +749,11 @@ def SymbianProgram( target, targettype, sources, includes,
                 copy_file( converted_rsc, installfolder )
 
                 # Copy to /epoc32/include/
-                includefolder += "/%s.%s" % ( rss_notype, "rsg" )
-                copy_file( converted_rsg, includefolder )
+                includepath = join( includefolder, "%s.%s" % ( rss_notype, "rsg" ) )
+                copy_file( converted_rsg, includepath )
 
                 # Add created header to be added for build dependency
-                resource_headers.append( includefolder )
+                resource_headers.append( includepath )
 
                 # _reg files copied to /epoc32/DATA/Z/private/10003a3f/apps/ on simulator
                 if COMPILER == COMPILER_WINSCW:
@@ -766,8 +775,9 @@ def SymbianProgram( target, targettype, sources, includes,
 
                 # Depend on previous
                 if prev_resource is not None:
-                    env.Depends( res_compile_command, prev_resource )
-                prev_resource = header_rsg
+                    print converted_rsg, includepath
+                    env.Depends( rss_path, prev_resource )
+                prev_resource = includepath
                 
         return converted_resources, resource_headers
 
