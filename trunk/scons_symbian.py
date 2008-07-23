@@ -19,10 +19,15 @@ from os.path import join
 from SCons.Environment import Environment
 from SCons.Builder     import Builder
 from SCons.Options     import Options, EnumOption
-from SCons.Script      import ARGUMENTS, Command, Copy, Execute, Depends, BuildDir, Install
+from SCons.Script      import ARGUMENTS, Command, Copy, \
+                              Execute, Depends, BuildDir, \
+                              Install, Default, Mkdir, Clean
 
 #: Easy constant for free caps
-FREE_CAPS = "NetworkServices LocalServices ReadUserData WriteUserData Location UserEnvironment PowerMgmt ProtServ SwEvent SurroundingsDD ReadDeviceData WriteDeviceData TrustedUI".split()
+FREE_CAPS = "NetworkServices LocalServices ReadUserData " \
+            "WriteUserData Location UserEnvironment PowerMgmt " \
+            "ProtServ SwEvent SurroundingsDD ReadDeviceData " \
+            "WriteDeviceData TrustedUI".split()
 
 #: Symbian SDK folder
 EPOCROOT = os.environ["EPOCROOT"]
@@ -45,6 +50,9 @@ if sys.platform == "win32":
     os.environ["EPOCROOT"] = EPOCROOT.replace("/", "\\")
 else:
     os.environ["EPOCROOT"] = EPOCROOT
+
+# Set EPOCROOT as default target, so the stuff will actually be built.
+Default( EPOCROOT )
     
 COMPILER_WINSCW = "winscw"
 COMPILER_GCCE   = "gcce"
@@ -614,7 +622,9 @@ def SymbianProgram( target, targettype, sources, includes,
     sources = [ OUTPUT_FOLDER + "/" + x for x in sources ]
     # This is needed often
     FOLDER_TARGET_TUPLE = ( OUTPUT_FOLDER, target )
-    if not os.path.exists(OUTPUT_FOLDER): os.makedirs( OUTPUT_FOLDER )
+    #if not os.path.exists(OUTPUT_FOLDER): os.makedirs( OUTPUT_FOLDER )
+    Mkdir( OUTPUT_FOLDER )
+    
 
     # Just give type of the file
     TARGET_RESULTABLE   = "%s/%s" % FOLDER_TARGET_TUPLE + "%s"
@@ -683,21 +693,6 @@ def SymbianProgram( target, targettype, sources, includes,
         resource_headers = []
 
         if resources is not None:
-            #res_includes = "-I " + " -I ".join( includes + INCLUDES )
-            #res_defines   = "-D" + " -D".join( rssdefines )
-#             convert_res_cmd = " ".join( [
-#                 r'perl -S',
-#                 os.path.join( EPOCROOT, "epoc32", "tools", "epocrc.pl" ),
-#                 r'-v -m045,046,047 -I-',
-#                 res_includes,
-#                 res_defines,
-#                 r'-u "%(SOURCEPATH)s"',
-#                 '-o"%(OUTPUT_FOLDER)s/%(RESOURCE)s.RSC"',
-#                 '-h"%(OUTPUT_FOLDER)s/%(RESOURCE)s.rsg"',
-#                 #r'-t"/epoc32/BUILD/Projects/LoggingServer/LoggingServerGUI/group/LOGGINGSERVERGUI/WINSCW"',
-#                 #r'-l"Z/resource/apps:/Projects/LoggingServer/LoggingServerGUI/group"',
-#             ] )
-            
             # Make the resources dependent on previous resource
             # Thus the resources must be listed in correct order.
             prev_resource = None
@@ -822,7 +817,6 @@ def SymbianProgram( target, targettype, sources, includes,
             build_prog = env.StaticLibrary( TARGET_RESULTABLE % ".lib" , sources )
             output_libpath = ( TARGET_RESULTABLE % ".lib",
                                 EPOCROOT + r"epoc32/release/armv5/%s/%s.lib" % ( RELEASE, target ) )
-                                
         
         #return
     else:
@@ -879,7 +873,7 @@ def SymbianProgram( target, targettype, sources, includes,
         else:
             build_prog = env.StaticLibrary( TARGET_RESULTABLE % ".lib" , sources )
             output_libpath = ( TARGET_RESULTABLE % ".lib",
-                                r"/epoc32/release/WINSCW/%s/%s.lib" % ( RELEASE, target ) )
+                                join( EPOCROOT + "epoc32", "release", COMPILER, RELEASE, "%s.lib" % ( target ) ) )
         
         if output_lib and targettype != TARGETTYPE_LIB:
             # Create .inf file
@@ -966,19 +960,25 @@ def SymbianProgram( target, targettype, sources, includes,
         and to resultables folder.
         """
         installfolder = [ COMPILER ]
-        if package != "": installfolder.append( package )
-        installfolder.append( "sys/bin/" ) 
-        installfolder = os.path.join( *installfolder )
+        Mkdir( COMPILER )
         
-        if not os.path.exists(installfolder): os.makedirs(installfolder)
-        installpath = installfolder + "%s.%s" % ( target, targettype )
+        if targettype != TARGETTYPE_LIB:
+            if package != "":  # Install the files for sis packaging.
+                installfolder.append( package )
+            installfolder += ["sys", "bin" ]
+        else: # Don't install libs to device.
+            installfolder  += ["lib"]
+            
+        installfolder = join( *installfolder )
+        Mkdir( installfolder )
         
-        # Combine with installfolder copying
-        # Because the EPOCROOT is not target by default
+        installpath = join( installfolder, "%s.%s" % ( target, targettype ) )
+        
+        # Combine with installfolder copying. TODO: Not needed anymore since EPOCROOT is default target.
         postcommands = []
         copysource = TARGET_RESULTABLE % ( "."+targettype)
         target_filename = target + "." + targettype
-        sdkpath       = SDKFOLDER + "/" + target_filename
+        sdkpath       = join( SDKFOLDER, target_filename )
 
         installed = []
         if COMPILER == COMPILER_WINSCW:
@@ -989,17 +989,16 @@ def SymbianProgram( target, targettype, sources, includes,
         if output_libpath is not None and \
         ( COMPILER == COMPILER_WINSCW or targettype == TARGETTYPE_LIB ):
             s,t = output_libpath
-            postcommands.append( Copy( t, s ) )#"copy %s %s" % ( s, t ) )
+            postcommands.append( Copy( t, s ) )
             installed.append( t )
 
-        # Last to avoid copying to installpath if sdkfolder fails
-        if targettype != TARGETTYPE_LIB: # No need to install LIBs to device!
-            postcommands.append( Copy( installpath, copysource ) )#"copy %s %s" % ( copysource, installfolder ) )
-            installed.append(installpath )
-            returned_command = env.Command( installed , copysource, postcommands )
+        # Last to avoid copying to installpath if sdkfolder fails        
+        postcommands.append( Copy( installpath, copysource ) )#"copy %s %s" % ( copysource, installfolder ) )
+        installed.append(installpath )
+        returned_command = env.Command( installed , copysource, postcommands )
         
         return installed
- 
+    
     installed = copy_result_binary()
     
     def create_install_file( installed ):
