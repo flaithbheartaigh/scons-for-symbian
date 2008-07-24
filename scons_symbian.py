@@ -389,13 +389,16 @@ def get_gcce_compiler_environment(  target,
     if targettype == TARGETTYPE_EXE:
         libraries.append( SYMBIAN_ARMV5_LIBPATHDSO + "eikcore.dso" )
     else:
-        # edllstub.lib must be just before euser.lib
+        # edllstub.lib must be just before euser.lib.. but they should not be first either.
         # Required for Tls::Dll
         # See: http://discussion.forum.nokia.com/forum/archive/index.php/t-59127.html
         for x in xrange(len(libraries)):
             lib = libraries[x]
             if lib.lower().endswith("euser.dso"):
-                libraries.insert( x, SYMBIAN_ARMV5_LIBPATHLIB + "edllstub.lib" )
+                # Move to last
+                libraries.remove( lib )
+                libraries.append( SYMBIAN_ARMV5_LIBPATHLIB + "edllstub.lib" )
+                libraries.append( lib )
                 break
         
     libraries = libraries + SYMBIAN_ARMV5_BASE_LIBRARIES
@@ -552,18 +555,45 @@ def get_gcce_compiler_environment(  target,
     
     return env
 
-
-
-#OUTPUT_FOLDER_TEMPLATE = "%(COMPILER)_%(RELEASE)s\\%(TARGET)s_%(TARGETTYPE)s"
-
+def SymbianPackage( package, uid, ensymbleargs = None ):
+    """
+    @param package: Name of the package.
+    @param ensymbleargs: Arguments to Ensymble simplesis.
+    """                     
+    if ensymbleargs is None:
+        ensymbleargs = {}
+    
+    print "SymbianPackage", package
+    
+    def create_install_file( installed ):
+        "Utility for creating an installation package using Ensymble"
+        from ensymble.cmd_simplesis import run as simplesis
+        
+        cmd = []
+        cmd.append( "--uid=%s" % uid )
+        
+        for x in ensymbleargs:
+            cmd += [ "%s=%s" % ( x, ensymbleargs[x] ) ]
+        cmd += [ COMPILER + "/%s/" % package, package ]
+        
+        def fcmd( env, target = None, source = None ):
+            try:
+                simplesis( "SCons", cmd )
+            except Exception, msg:
+                return Exception, msg
+            
+        Command( package, installed, fcmd )
+    
+    if ENSYMBLE_AVAILABLE:
+        create_install_file( [] )
+        
 def SymbianProgram( target, targettype, sources, includes,
                     libraries = None, uid2 = None, uid3 = "0x0",
                     definput = None, capabilities = None,
                     icons = None, resources = None,
                     rssdefines = None, 
                     # Sis stuff
-                    package  = "",
-                    ensymbleargs = None,
+                    package  = "",                 
                     **kwargs ):
     """
     Compiles sources using selected compiler.
@@ -573,8 +603,6 @@ def SymbianProgram( target, targettype, sources, includes,
     @param capabilities: Used capabilities. Default: FREE_CAPS
     @param rssdefines: Preprocessor definitions for resource compiler.
     @param package: Path to installer file. If given, an installer is created automatically.
-    @param ensymbleargs: Arguments to Ensymble simplesis. 1 SymbianProgram must define to create sis.
-                         Use empty dict if no parameters needed.
     @param **kwargs: Keywords passed to C{getenvironment()}
     @return: Last Command. For setting dependencies.
     """
@@ -595,15 +623,15 @@ def SymbianProgram( target, targettype, sources, includes,
     rssdefines.append( r'LANGUAGE_SC' )
     
     # Check if stuff exists
-    checked_paths = []
-    checked_paths.extend( sources )
-    checked_paths.extend( includes )
-    if resources is not None:
-        checked_paths.extend( resources )
+    #checked_paths = []
+    #checked_paths.extend( sources )
+    #checked_paths.extend( includes )
+    #if resources is not None:
+    #    checked_paths.extend( resources )
 
-    for x in checked_paths:
-        if not os.path.exists( x ):
-            raise IOError( x + " does not exist")
+    #for x in checked_paths:
+    #    if not os.path.exists( x ):
+    #        raise IOError( x + " does not exist")
 
 
     # Is this Symbian component enabled?
@@ -646,8 +674,10 @@ def SymbianProgram( target, targettype, sources, includes,
         if icons is not None:
 
             result_install = COMPILER + "/resource/apps/"
-            sdk_resource = EPOCROOT + r"epoc32/DATA/Z/resource/apps/%s"
-
+            sdk_data_resource = EPOCROOT + r"epoc32/DATA/Z/resource/apps/%s"
+            sdk_resource = join( EPOCROOT + r"epoc32", "release", COMPILER,
+                             RELEASE, "z",  "resource", "apps", "%s" )
+            
             if not os.path.exists(result_install): os.makedirs(result_install)
             result_install += "%s"
 
@@ -666,9 +696,13 @@ def SymbianProgram( target, targettype, sources, includes,
                 env.Command( tmp, x, convert_icons_cmd % ( tmp, x ) )
 
                 sdk_target = sdk_resource % os.path.basename(tmp)
-                copyres_cmds.append( Copy( sdk_target, tmp ) )#"copy %s %s" % ( tmp, sdk_target ) )
+                copyres_cmds.append( Copy( sdk_target, tmp ) )
                 sdk_icons.append( sdk_target )
-            #import pdb;pdb.set_trace()
+                
+                sdk_target = sdk_data_resource % os.path.basename(tmp)
+                copyres_cmds.append( Copy( sdk_target, tmp ) )
+                sdk_icons.append( sdk_target )
+
             return env.Command( sdk_icons, icon_targets, copyres_cmds )
 
             #return icon_targets
@@ -768,9 +802,9 @@ def SymbianProgram( target, targettype, sources, includes,
 
                 header_rsg = env.Command( result_paths, converted_resources, copyres_cmds )
 
-                # Depend on previous
+                # Depend on previous. TODO: Use SCons Preprocessor scanner.
                 if prev_resource is not None:
-                    print converted_rsg, includepath
+                    #print converted_rsg, includepath
                     env.Depends( rss_path, prev_resource )
                 prev_resource = includepath
                 
@@ -1000,29 +1034,8 @@ def SymbianProgram( target, targettype, sources, includes,
         return installed
     
     installed = copy_result_binary()
-    
-    def create_install_file( installed ):
-        "Utility for creating an installation package using Ensymble"
-        from ensymble.cmd_simplesis import run as simplesis
         
-        cmd = []
-        cmd.append( "--uid=%s" % uid3 )
-        
-        for x in ensymbleargs:
-            cmd += [ "--%s=%s" % ( x, ensymbleargs[x] ) ]
-        cmd += [ COMPILER + "/%s/" % package, package ]
-        
-        def fcmd( env, target = None, source = None ):
-            try:
-                simplesis( "SCons", cmd )
-            except Exception, msg:
-                return Exception, msg
-            
-        env.Command( package, installed, fcmd )
-        
-    if ENSYMBLE_AVAILABLE and package != "" and ensymbleargs is not None:
-        create_install_file( installed )
-    elif package != "" and targettype != TARGETTYPE_LIB:
+    if package != "" and targettype != TARGETTYPE_LIB:
         # package depends on the files anyway
         env.Depends( package, installed )
     
