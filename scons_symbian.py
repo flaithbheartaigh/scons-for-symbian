@@ -23,6 +23,10 @@ from SCons.Script      import ARGUMENTS, Command, Copy, \
                               Execute, Depends, BuildDir, \
                               Install, Default, Mkdir, Clean
 
+import colorizer
+#if colorizer.CONSOLE is not None:
+OUTPUT_COLORIZER = colorizer.OutputConsole(  )
+    
 #: Easy constant for free caps
 FREE_CAPS = "NetworkServices LocalServices ReadUserData " \
             "WriteUserData Location UserEnvironment PowerMgmt " \
