@@ -48,7 +48,7 @@ KEYWORD_COMMENT  = [ x.lower() for x in [ "scons:", "note:", "copy("] ]
 KEYWORD_COMMENT_EXCLUDE = []
 
 #: Warning keywords. Drawn with Colors.WARNING
-KEYWORD_WARNINGS = ["warning "]
+KEYWORD_WARNINGS = ["warning ", "warning:"]
 
 #: Excluded warnings
 KEYWORD_WARNINGS_EXCLUDE = ["-warning"]
@@ -57,9 +57,6 @@ KEYWORD_WARNINGS_EXCLUDE = ["-warning"]
 KEYWORDMAP = [ ( KEYWORD_WARNINGS, KEYWORD_WARNINGS_EXCLUDE, Colors.WARNING ),
                ( KEYWORD_ERRORS,   KEYWORD_ERRORS_EXCLUDE,   Colors.ERROR ),
                ( KEYWORD_COMMENT,  KEYWORD_COMMENT_EXCLUDE,  Colors.COMMENT ) ]
-
-#if CONSOLE is None:
-#    print  "Colorized output disabled."
 
 class LineCounts:
     def __init__(self):
