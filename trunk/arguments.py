@@ -85,19 +85,17 @@ RELEASE    = ARGUMENTS.get( "release",  RELEASE_UDEB ).lower()
 
 PACKAGE_FOLDER = join( "%s_%s" % ( COMPILER, RELEASE ), "packages" )
 
-ENSYMBLE_AVAILABLE = ( ARGUMENTS.get( "dosis",  "False" ).capitalize() == "True" )
+DO_CREATE_SIS = ( ARGUMENTS.get( "dosis",  "False" ).capitalize() == "True" )
+ENSYMBLE_AVAILABLE = False
 try:
-    if COMPILER != COMPILER_WINSCW and ENSYMBLE_AVAILABLE:
+    if COMPILER != COMPILER_WINSCW and DO_CREATE_SIS:
         import ensymble
         ENSYMBLE_AVAILABLE = True
-    else:
-        ENSYMBLE_AVAILABLE = False 
 except ImportError:
-    print "Info: Get Ensymble for sis creation support"
-    ENSYMBLE_AVAILABLE = False
+    print "Info: Automatic SIS creation requires Ensymble."
     
-if not ENSYMBLE_AVAILABLE:
-    print "SIS creation disabled"
+if not DO_CREATE_SIS:
+    print "Info: SIS creation disabled"
 
 #: Built components. One SConstruct can define multiple SymbianPrograms.
 #: This can be used from command-line to build only certain SymbianPrograms

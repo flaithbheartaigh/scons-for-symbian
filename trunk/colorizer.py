@@ -8,6 +8,8 @@ import os
 import sys
 import subprocess as sp
 
+from SCons.Platform import win32
+
 #: Pyreadline console
 CONSOLE = None
 try:
@@ -73,9 +75,17 @@ savedstdout = sys.stdout
 
 def write( line, color ):
     """Write line with color"""
+    global CONSOLE
+    
     if CONSOLE is not None:
-        CONSOLE.write_color( line, color)
-        CONSOLE.write_color( "", CONSOLE.attr)
+        try:
+            CONSOLE.write_color( line, color)
+            CONSOLE.write_color( "", CONSOLE.attr)
+        except TypeError:
+            # Occurs at least when redirecting data to a file
+            # So disable the color support
+            CONSOLE = None
+            savedstdout.write( line )
     else:
         savedstdout.write( line )
         
@@ -111,7 +121,6 @@ class ConsoleBase(object):
 
         return result
 
-from SCons.Platform import win32
 class OutputConsole(ConsoleBase):
     """Handles spawning external processes and determines how the data is colored
     """
