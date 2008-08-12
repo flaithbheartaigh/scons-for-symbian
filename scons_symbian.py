@@ -70,7 +70,7 @@ def create_environment( *args, **kwargs ):
         raise NotImplemented( msg )
     return env
  
-def SymbianPackage( package, uid, ensymbleargs = None, pkgfile=None ):
+def SymbianPackage( package, ensymbleargs = None, pkgfile=None ):
     """
     Create Symbian Installer( sis ) file. Can use either Ensymble or pkg file.
     @param package: Name of the package.
@@ -89,9 +89,8 @@ def SymbianPackage( package, uid, ensymbleargs = None, pkgfile=None ):
         from ensymble.cmd_simplesis import run as simplesis
         
         cmd = []
-        cmd.append( "--uid=%s" % uid )
         
-        if pkgfile is None:
+        if pkgfile is None and ENSYMBLE_AVAILABLE:
              
             for x in ensymbleargs:
                 cmd += [ "%s=%s" % ( x, ensymbleargs[x] ) ]
@@ -103,15 +102,15 @@ def SymbianPackage( package, uid, ensymbleargs = None, pkgfile=None ):
                 except Exception, msg:
                     return Exception, msg
             
-            Command( package, installed, ensymble, ENV = os.environ )
+            return Command( package, installed, ensymble, ENV = os.environ )
         
         else:
             cmd = "makesis %s %s" % ( pkgfile, package )
-            Command( package, installed + [pkgfile], cmd, ENV = os.environ )
+            return Command( package, installed + [pkgfile], cmd, ENV = os.environ )
             
  
-    if ENSYMBLE_AVAILABLE:
-        create_install_file( [] )
+    if DO_CREATE_SIS:
+        return create_install_file( [] )
         
 def SymbianProgram( target, targettype, sources, includes,
                     libraries = None, uid2 = None, uid3 = "0x0",

@@ -190,7 +190,7 @@ def create_environment( target,
                     
                     # Compiler settings
                     CC  = r'arm-none-symbianelf-g++',
-                    CFLAGS = WARNINGS +  " -x c   -include " + COMPILER_INCLUDE,
+                    CFLAGS = WARNINGS +  " -x c -include " + COMPILER_INCLUDE,
                     
                     CXX = r'arm-none-symbianelf-g++',
                     CXXFLAGS = WARNINGS + " -x c++ -include " + COMPILER_INCLUDE,
@@ -213,7 +213,7 @@ def create_environment( target,
                 
     # Add special builders------------------------------------------------------
 
-    # Elf32 converter
+    # Elf2e32 converter
     elf2e32_cmd = ELF2E32 % { "EPOCROOT"    : EPOCROOT,
                           "CAPABILITIES": "+".join( capabilities ),
                           "TARGET"      : target,
@@ -228,11 +228,7 @@ def create_environment( target,
     elf2e32_builder = Builder( action     = elf2e32_cmd.replace("\\", "/"),
                        src_suffix = ".noelfexe",
                        suffix     = "." + targettype,
-                       #prefix     = elf2e32_output,
-                       #chdir      = elf2e32_output,
                        single_source = True,
-
-                       #emitter    = elf_targets )#elf2e32_output + target + ".exe" )#, prefix = elf2e32_output )
                      )
     env.Append( BUILDERS = { "Elf" : elf2e32_builder } )
     
