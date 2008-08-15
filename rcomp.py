@@ -7,7 +7,9 @@ import cpp
 from SCons.Script import Command
 
 RCOMP = os.environ["EPOCROOT"] + os.path.join( "epoc32", "tools", "rcomp" )
-
+if sys.platform == "linux2":
+    RCOMP = "wine " + RCOMP + ".exe"
+    
 def RComp( env, rsc, rsg, rss, options, includes, fileinc, defines ):
     """Utility for creating Command for Symbian resource compiler"""
     # Preprocess the resource file first
@@ -16,8 +18,7 @@ def RComp( env, rsc, rsg, rss, options, includes, fileinc, defines ):
     
     cpp.Preprocess( env, rpp, rss, includes, fileinc, defines + ["_UNICODE" ] )
     
-    #def RunRComp( env, target = None, source = None ):
-    cmd = RCOMP + ' -u %s -o"%s" -h"%s" -s"%s" -i"%s" ' % \
+    cmd = RCOMP + ' -v -u %s -o"%s" -h"%s" -s"%s" -i"%s" ' % \
             ( options, rsc, rsg, rpp, rss )        
             
     return env.Command( [rsc,rsg], [rpp,rss], cmd )

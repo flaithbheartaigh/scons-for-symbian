@@ -9,19 +9,39 @@ from SCons.Script import Command
 
 CPP = os.environ["EPOCROOT"] + os.path.join( "epoc32", "gcc", "bin", "cpp" )
 
+if sys.platform == "linux2":
+    CPP = "wine " + CPP + ".exe"
+
 def Preprocess( env, target, source, includes, fileinc, defines ):
     """Utility for creating Command for preprocessor"""
+    handle_path = abspath
+    
+    if sys.platform == "linux2":
+        # Use relative on linux
+        
+        def h( x ):
+            import relpath
+            if not x.startswith( "/" ):
+                return x
+            
+            p = relpath.relpath( abspath( os.curdir ), x )
+            #print p
+            return p
+            
+        handle_path = h
+    
+    # This is strange... On windows it seems that include paths must be absolute and relative on linux
     cmd=[
             CPP,
             "-undef -C -I-",
             "-I",
-            " -I ".join( [ abspath(x) for x in includes ]  ), # Requires absolute path!
+            " -I ".join( [ handle_path(x) for x in includes ]  ),
 
             " -D" + " -D".join( defines ),
             source,
             " -o %s" % target,
             " -include",
-            " -include ".join( [ abspath(x) for x in fileinc ] ) # Requires absolute path!
+            " -include ".join( [ handle_path(x) for x in fileinc ] )
         ]
     cmd = " ".join( cmd )
     
