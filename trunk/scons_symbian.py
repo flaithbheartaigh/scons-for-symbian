@@ -104,7 +104,7 @@ def SymbianPackage( package, ensymbleargs = None, pkgfile=None ):
             
             return Command( package, installed, ensymble, ENV = os.environ )
         
-        else:
+        elif pkgfile is not None:
             cmd = "makesis %s %s" % ( pkgfile, package )
             return Command( package, installed + [pkgfile], cmd, ENV = os.environ )
             

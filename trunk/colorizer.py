@@ -37,7 +37,7 @@ if CONSOLE is not None:
 #: Lines containing these strings are drawn in Colors.ERROR color
 KEYWORD_ERRORS = [ x.lower() for x in [ "error:", " error ", "failed", " undefined ", "does not match", "illegal",
                "was expected", "The process cannot access",
-               "No such file or directory",
+               "No such file or directory", "*** "
                "Cannot convert", "needed by", "explicit dependency" ] ]
 
 #: Excluded errors
@@ -122,7 +122,7 @@ class ConsoleBase(object):
         return result
 
 class OutputConsole(ConsoleBase):
-    """Handles spawning external processes and determines how the data is colored
+    """Handles spawning external processes and colors the console output.
     """
     def __init__(self ):
         ConsoleBase.__init__(self)

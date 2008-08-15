@@ -93,6 +93,9 @@ try:
         ENSYMBLE_AVAILABLE = True
 except ImportError:
     print "Info: Automatic SIS creation requires Ensymble."
+
+if COMPILER == COMPILER_WINSCW:
+    DO_CREATE_SIS = False
     
 if not DO_CREATE_SIS:
     print "Info: SIS creation disabled"
