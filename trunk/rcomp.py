@@ -18,7 +18,7 @@ def RComp( env, rsc, rsg, rss, options, includes, fileinc, defines ):
     
     cpp.Preprocess( env, rpp, rss, includes, fileinc, defines + ["_UNICODE" ] )
     
-    cmd = RCOMP + ' -v -u %s -o"%s" -h"%s" -s"%s" -i"%s" ' % \
+    cmd = RCOMP + ' -u %s -o"%s" -h"%s" -s"%s" -i"%s" ' % \
             ( options, rsc, rsg, rpp, rss )        
             
     return env.Command( [rsc,rsg], [rpp,rss], cmd )
