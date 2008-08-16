@@ -64,8 +64,8 @@ def IPCPyd():
     "Build IPC module"
     # Use all .cpp files in the current directory.
     sources  = glob.glob( "*.cpp" )
-    inc      = [ r"\epoc32\include\libc",
-                 r"\epoc32\include\python",
+    inc      = [ EPOCROOT + r"epoc32/include/libc",
+                 EPOCROOT + r"epoc32/include/python",
                  r"."
                ]
     libs = ["python222", "euser"]
