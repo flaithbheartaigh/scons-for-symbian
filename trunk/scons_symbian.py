@@ -282,13 +282,18 @@ def SymbianProgram( target, targettype, sources, includes,
                 includefolder = EPOCROOT + join( "epoc32", "include" )
                 
                 installfolder = [ PACKAGE_FOLDER ]
-                if package != "": installfolder.append( package )
-                installfolder.append( join( "private","10003a3f","import","apps" ) )
+                if package != "": 
+                    installfolder.append( package )
+                if rss_notype.endswith( "_reg" ):
+                    installfolder.append( join( "private", "10003a3f","import","apps" ) )
+                else:
+                    installfolder.append( join( "resource", "apps" ) )
                 installfolder = os.path.join( *installfolder )
                  
-                if not os.path.exists(installfolder): os.makedirs(installfolder)
+                if not os.path.exists(installfolder): 
+                    os.makedirs(installfolder)
 
-                ## Copy files for sis creation and for simulator
+                # Copy files for sis creation and for simulator
                 def copy_file( source_path, target_path ):
                     copy_cmd = Copy( target_path, source_path )
                     #"copy %s %s" % ( source_path, target_path )
