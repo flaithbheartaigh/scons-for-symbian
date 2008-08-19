@@ -127,6 +127,11 @@ def __get_defines():
 #: Command-line define support
 CMD_LINE_DEFINES = __get_defines()
 
+#: Extra libraries( debug library etc. )
+CMD_LINE_LIBS    = ARGUMENTS.get( "extra_libs", None )
+if CMD_LINE_LIBS is not None: 
+    CMD_LINE_LIBS = CMD_LINE_LIBS.split(",")
+    
 #: SDK Installation folder
 SDKFOLDER     =  os.path.join( EPOCROOT, 
                                "epoc32", 
