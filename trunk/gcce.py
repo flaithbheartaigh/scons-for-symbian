@@ -143,14 +143,14 @@ def create_environment( target,
                 --output=$TARGET
                 %(DEFCONFIG)s
                 --elfinput="%(WORKING_DIR)s/$SOURCE"
-                --linkas=%(TARGET)s{000a0000}[%(UID3)s].%(TARGETTYPE)s
+                --linkas=%(TARGET)s{000a0000}.%(TARGETTYPE)s
                 --libpath="%(EPOCROOT)sepoc32/release/armv5/lib"
                 """
     if allowdlldata and targettype in DLL_TARGETTYPES:
         ELF2E32 += "--dlldata "
     
     if epocstacksize is not None and targettype == TARGETTYPE_EXE:
-        ELF2E32 += "--stack=" + "0x" + hex( 0x00010000 ).replace("0x","").zfill( 8 )
+        ELF2E32 += "--stack=" + "0x" + hex( epocstacksize ).replace("0x","").zfill( 8 )
          
     ELF2E32 = textwrap.dedent( ELF2E32 )
     ELF2E32 = " ".join( [ x.strip() for x in ELF2E32.split("\n") ] )
@@ -177,7 +177,7 @@ def create_environment( target,
         defconfig += ["--unfrozen" ]
         defconfig += ["--dso " + os.environ["EPOCROOT"] + "epoc32/release/ARMV5/LIB/" + target + ".dso"]
         defconfig = " ".join( defconfig )
-
+        
         uid1 = TARGETTYPE_UID_MAP[TARGETTYPE_DLL]#"0x10000079" # DLL
  
     env = Environment (

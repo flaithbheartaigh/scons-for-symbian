@@ -134,6 +134,9 @@ def SymbianProgram( target, targettype, sources, includes,
 
     if libraries is None:
         libraries = []
+    if CMD_LINE_LIBS is not None:
+        libraries.extend( CMD_LINE_LIBS )
+    
     if capabilities is None:
         capabilities = FREE_CAPS
     if rssdefines is None:
