@@ -1,4 +1,12 @@
-"""Environment for GCCE compiler"""
+"""
+Environment for GCCE compiler
+
+This file is part of SCons for Symbian project.
+
+"""
+
+__author__    = "Jussi Toivola"
+__license__   = "MIT License"
 
 import textwrap
 
@@ -33,7 +41,11 @@ SYMBIAN_ARMV5_BASE_LIBRARIES += [ SYMBIAN_ARMV5_LIBPATHDSO + x + ".dso" for x in
 # LIBARGS must be AFTER the libraries or we get "undefined reference to `__gxx_personality_v0'" when linking
 WARNINGS =  "-Wall -Wno-ctor-dtor-privacy -Wno-unknown-pragmas -fexceptions " \
             "-march=armv5t -mapcs -pipe -nostdinc -msoft-float"
+
             
+# These are enabled from FP1 onwards on regular scripts. Reduces size of the binaries.
+GCCE_OPTIMIZATION_FLAGS = "-O2 -fno-unit-at-a-time"
+
 def create_environment( target,
                         targettype,
                         includes,
@@ -179,7 +191,7 @@ def create_environment( target,
         defconfig = " ".join( defconfig )
         
         uid1 = TARGETTYPE_UID_MAP[TARGETTYPE_DLL]#"0x10000079" # DLL
- 
+    
     env = Environment (
                     tools = ["mingw"], # Disable searching of tools
                     ENV = os.environ,
@@ -193,7 +205,7 @@ def create_environment( target,
                     CFLAGS = WARNINGS +  " -x c -include " + COMPILER_INCLUDE,
                     
                     CXX = r'arm-none-symbianelf-g++',
-                    CXXFLAGS = WARNINGS + " -x c++ -include " + COMPILER_INCLUDE,
+                    CXXFLAGS = WARNINGS + " " + GCCE_OPTIMIZATION_FLAGS + " -x c++ -include " + COMPILER_INCLUDE,
                     CPPPATH = INCLUDES + includes,
                     CPPDEFINES = defines,
                     INCPREFIX = "-I ",
