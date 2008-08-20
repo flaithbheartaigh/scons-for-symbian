@@ -78,6 +78,15 @@ IPCPyd()
 
 }}}
 
+== SConstruct & MMP import ==
+
+It's not fun to redefine your project, if there is a complete MMP around.
+{{{
+#!/usr/env/bin python
+from scons_symbian import *
+SymbianProgram( "ipc.mmp" )
+}}}
+
 == Building ==
 Build for simulator
  scons compiler=winscw
