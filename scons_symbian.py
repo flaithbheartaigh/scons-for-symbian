@@ -112,7 +112,8 @@ def SymbianPackage( package, ensymbleargs = None, pkgfile=None ):
     if DO_CREATE_SIS:
         return create_install_file( [] )
         
-def SymbianProgram( target, targettype, sources, includes,
+def SymbianProgram( target, targettype = None, 
+                    sources = None, includes = None,
                     libraries = None, uid2 = None, uid3 = "0x0",
                     definput = None, capabilities = None,
                     icons = None, resources = None,
@@ -124,6 +125,8 @@ def SymbianProgram( target, targettype, sources, includes,
     Compiles sources using selected compiler.
     Converts resource files.
     Converts icon files.
+    @param target: Name of the module without file extension.
+                   If the file ends with .mmp, the .mmp file is used for defining the module. 
     @param libraries: Used libraries.
     @param capabilities: Used capabilities. Default: FREE_CAPS
     @param rssdefines: Preprocessor definitions for resource compiler.
@@ -132,23 +135,52 @@ def SymbianProgram( target, targettype, sources, includes,
     @return: Last Command. For setting dependencies.
     """
 
+    if target.lower().endswith( ".mmp" ):
+        import mmp_parser
+        p = mmp_parser.MMPParser( target )
+        data = p.Parse()
+        
+        target       = data["target"]
+        targettype   = data["targettype"]
+        sources      = data["source"]        
+        includes     = data["systeminclude"] + data["userinclude"]
+        resources    = data["resources"]
+        libraries    = data["library"]
+        uid2         = data["uid"][0]
+        uid3         = data["uid"][1]
+        
+        # Allow override in SConstruct
+        if capabilities is None:
+            capabilities = data["capability"]
+        
+        # Allow override in SConstruct
+        if rssdefines is None:
+            rssdefines = data["macro"][:]
+        
+        kwargs["defines"]       = data["macro"][:]
+        kwargs["allowdlldata"]  = data["epocallowdlldata"]
+        kwargs["epocstacksize"] = data["epocstacksize"]
+   
     if libraries is None:
         libraries = []
+        
     if CMD_LINE_LIBS is not None:
         libraries.extend( CMD_LINE_LIBS )
     
     if capabilities is None:
         capabilities = FREE_CAPS
+        
     if rssdefines is None:
         rssdefines = []
-     
+    rssdefines.append( r'LANGUAGE_SC' ) 
+    
     if uid2 is None:
         if targettype == TARGETTYPE_EXE:
             uid2 = "0x100039ce"
         else:
             uid2 = "0x0"
     
-    rssdefines.append( r'LANGUAGE_SC' )
+    
       
     # Is this Symbian component enabled?
     component_name = ".".join( [ target, targettype] ).lower()
@@ -273,6 +305,7 @@ def SymbianProgram( target, targettype, sources, includes,
                 # Compile resource files
                 #res_compile_command = env.Command( [converted_rsc, converted_rsg], rss_path, cmd )
                 import rcomp
+                
                 res_compile_command = rcomp.RComp( env, converted_rsc, converted_rsg,
                              rss_path,
                              "-m045,046,047",
