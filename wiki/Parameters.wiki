@@ -19,6 +19,6 @@ dosis=<true\false, default:false>
  When true, enables sis file creation. Disabled by default to not get in the way of lightning fast code-compile cycle.
 
 === Example ===
-scons compiler=winscw release=udeb component=my.dll --debug=explain
+scons compiler=winscw release=udeb components=my.dll --debug=explain
 
 --debug=explain is SCons' own parameter.
