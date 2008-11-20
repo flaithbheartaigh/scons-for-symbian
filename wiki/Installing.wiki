@@ -26,7 +26,7 @@ And you should be good to go.
 
 ==== Install Ensymble ( Optional ) ====
 
-If you want scons-for-symbian to handle your sis creation needs, install [http://www.nbl.fi/~nbl928/ensymble.html Ensymble]. Get the source package, *DO NOT* get a pre-squeezed version.
+Even though PKG generation support is implemented, SIS files can also be created with [http://www.nbl.fi/~nbl928/ensymble.html Ensymble]. It can be a handy utility for various other tasks too. Get the source package, *DO NOT* get a pre-squeezed version.
   * Unpack the archive
   * Create 'ensymble' folder to 'Python25\Lib\site-packages\'
   * Put the ensymble files there
